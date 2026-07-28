@@ -542,6 +542,8 @@ private fun ExerciseTimeline(
         ) {
             val laneY = size.height * 0.55f
             val judgementX = size.width * 0.28f
+            val judgementLineHalfHeight =
+                ACCENT_NOTE_RADIUS_PX * JUDGEMENT_LINE_DIAMETER_MULTIPLIER
             drawLine(
                 color = lineColor,
                 start = Offset(0f, laneY),
@@ -580,7 +582,11 @@ private fun ExerciseTimeline(
                 if (x in -24f..size.width + 24f) {
                     drawCircle(
                         color = if (note.accent) accentColor else noteColor,
-                        radius = if (note.accent) 15f else 11f,
+                        radius = if (note.accent) {
+                            ACCENT_NOTE_RADIUS_PX
+                        } else {
+                            NOTE_RADIUS_PX
+                        },
                         center = Offset(x, laneY),
                     )
                 }
@@ -588,8 +594,14 @@ private fun ExerciseTimeline(
 
             drawLine(
                 color = judgementColor,
-                start = Offset(judgementX, 0f),
-                end = Offset(judgementX, size.height),
+                start = Offset(
+                    judgementX,
+                    (laneY - judgementLineHalfHeight).coerceAtLeast(0f),
+                ),
+                end = Offset(
+                    judgementX,
+                    (laneY + judgementLineHalfHeight).coerceAtMost(size.height),
+                ),
                 strokeWidth = 6f,
                 cap = StrokeCap.Round,
             )
@@ -749,3 +761,7 @@ private fun PracticePhase.isPlayerVisible(): Boolean = this in setOf(
     PracticePhase.RESUME_COUNT_IN,
     PracticePhase.COMPLETED,
 )
+
+private const val NOTE_RADIUS_PX = 11f
+private const val ACCENT_NOTE_RADIUS_PX = 15f
+private const val JUDGEMENT_LINE_DIAMETER_MULTIPLIER = 10f

@@ -130,6 +130,9 @@ crosses the judgement line, including beats muted by downbeat-only mode. The
 ring follows that beat to the left and lasts for one quarter of the current
 beat duration, so it scales with tempo.
 
+The judgement line is centered on the rhythm lane and is ten times the diameter
+of the largest note circle rather than spanning the full player height.
+
 Starting an inspection opens a dedicated full-screen player containing the
 timeline, current status, and playback controls. Initial playback waits two
 seconds after opening the player before starting the count-in or exercise,
