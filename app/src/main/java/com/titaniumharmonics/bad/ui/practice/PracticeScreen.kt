@@ -27,10 +27,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
@@ -111,6 +115,9 @@ fun PracticeScreen(
     onIncreaseMeasureCount: () -> Unit,
 ) {
     val playbackExercise = uiState.playbackExercise
+    var playbackSettingsExpanded by rememberSaveable(uiState.exercise?.id) {
+        mutableStateOf(false)
+    }
     if (playbackExercise != null && uiState.phase.isPlayerVisible()) {
         FullScreenPracticePlayer(
             exercise = playbackExercise,
@@ -161,24 +168,32 @@ fun PracticeScreen(
                     onLoad = onLoad,
                 )
             } else {
-                ExerciseCard(exercise)
-                uiState.playbackSettings?.let { playbackSettings ->
-                    PlaybackSettingsCard(
-                        settings = playbackSettings,
-                        enabled = uiState.phase !in setOf(
-                            PracticePhase.PREPARING,
-                            PracticePhase.COUNTING_IN,
-                            PracticePhase.RUNNING,
-                            PracticePhase.PAUSED,
-                            PracticePhase.RESUME_COUNT_IN,
-                        ),
-                        onDecreaseTempo = onDecreaseTempo,
-                        onIncreaseTempo = onIncreaseTempo,
-                        onCountInEnabledChange = onCountInEnabledChange,
-                        onDownbeatsOnlyChange = onDownbeatsOnlyChange,
-                        onDecreaseMeasureCount = onDecreaseMeasureCount,
-                        onIncreaseMeasureCount = onIncreaseMeasureCount,
-                    )
+                ExerciseCard(
+                    exercise = exercise,
+                    playbackSettingsExpanded = playbackSettingsExpanded,
+                    onTogglePlaybackSettings = {
+                        playbackSettingsExpanded = !playbackSettingsExpanded
+                    },
+                )
+                AnimatedVisibility(visible = playbackSettingsExpanded) {
+                    uiState.playbackSettings?.let { playbackSettings ->
+                        PlaybackSettingsCard(
+                            settings = playbackSettings,
+                            enabled = uiState.phase !in setOf(
+                                PracticePhase.PREPARING,
+                                PracticePhase.COUNTING_IN,
+                                PracticePhase.RUNNING,
+                                PracticePhase.PAUSED,
+                                PracticePhase.RESUME_COUNT_IN,
+                            ),
+                            onDecreaseTempo = onDecreaseTempo,
+                            onIncreaseTempo = onIncreaseTempo,
+                            onCountInEnabledChange = onCountInEnabledChange,
+                            onDownbeatsOnlyChange = onDownbeatsOnlyChange,
+                            onDecreaseMeasureCount = onDecreaseMeasureCount,
+                            onIncreaseMeasureCount = onIncreaseMeasureCount,
+                        )
+                    }
                 }
                 ExerciseTimeline(
                     exercise = exercise,
@@ -456,8 +471,13 @@ private fun EmptyExerciseCard(
 }
 
 @Composable
-private fun ExerciseCard(exercise: Exercise) {
+private fun ExerciseCard(
+    exercise: Exercise,
+    playbackSettingsExpanded: Boolean,
+    onTogglePlaybackSettings: () -> Unit,
+) {
     Card(
+        onClick = onTogglePlaybackSettings,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
     ) {
@@ -487,6 +507,26 @@ private fun ExerciseCard(exercise: Exercise) {
                 ExerciseFact(
                     label = "MEASURES",
                     value = exercise.measureCount.toString(),
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (playbackSettingsExpanded) {
+                        "Hide playback settings"
+                    } else {
+                        "Show playback settings"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = if (playbackSettingsExpanded) "▲" else "▼",
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
         }

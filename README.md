@@ -24,8 +24,8 @@ timeline. Microphone capture and hit detection are not implemented yet.
 - Single-lane scrolling rhythm timeline
 - BPM-scaled beat highlights at the judgement line
 - Full-screen practice playback with pause, resume, repeat, and stop controls
-- Per-exercise playback controls for tempo, count-in, measure count, and
-  downbeat-only clicks
+- Collapsible per-exercise playback controls for tempo, count-in, measure
+  count, and downbeat-only clicks
 - Lifecycle-aware playback cleanup
 - JVM tests for exercise parsing, validation, timing, and click generation
 - GitHub Actions verification with downloadable debug APKs
@@ -121,6 +121,9 @@ effect for repeated runs of that exercise and reset when another exercise is
 loaded. Longer sessions repeat the exercise pattern; shorter sessions truncate
 it at the selected measure boundary. Settings are locked while playback is
 preparing, counting in, or running.
+
+Playback settings are collapsed by default. Tapping the exercise information
+card toggles them without changing the configured values.
 
 The downbeat-only option keeps the full count-in audible, then plays the
 metronome only on the first beat of each exercise measure.
