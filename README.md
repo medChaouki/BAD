@@ -24,6 +24,7 @@ timeline. Microphone capture and hit detection are not implemented yet.
 - Single-lane scrolling rhythm timeline
 - Lifecycle-aware playback cleanup
 - JVM tests for exercise parsing, validation, timing, and click generation
+- GitHub Actions verification with downloadable debug APKs
 
 ## Running the app
 
@@ -110,6 +111,13 @@ that clock; Compose animation is not the authoritative timing source.
 Metronome clicks are sample-aligned relative to one another. Physical output
 latency still depends on the Android device and audio route. Output-latency
 calibration has not been implemented yet.
+
+## Continuous integration
+
+GitHub Actions runs unit tests, Android lint, and a debug build for pull
+requests, pushes to `main`, and manual workflow runs. Successful runs publish
+the debug APK for 14 days. Test and lint reports are uploaded even when
+verification fails.
 
 ## Tests and static checks
 
