@@ -225,6 +225,22 @@ private fun FullScreenPracticePlayer(
     onRepeat: () -> Unit,
     onStop: () -> Unit,
 ) {
+    val timing = remember(exercise) { ExerciseTiming(exercise) }
+    val timelineElapsedNanos = when (uiState.phase) {
+        PracticePhase.PREPARING -> {
+            if (exercise.countInMeasures > 0) {
+                -timing.quarterNoteDurationNanos
+            } else {
+                0L
+            }
+        }
+        PracticePhase.COUNTING_IN -> {
+            uiState.exerciseElapsedNanos.coerceAtLeast(
+                -timing.quarterNoteDurationNanos,
+            )
+        }
+        else -> uiState.exerciseElapsedNanos
+    }
     val playerTextColor = if (
         MaterialTheme.colorScheme.background.luminance() < 0.5f
     ) {
@@ -240,7 +256,7 @@ private fun FullScreenPracticePlayer(
     ) {
         ExerciseTimeline(
             exercise = exercise,
-            exerciseElapsedNanos = uiState.exerciseElapsedNanos,
+            exerciseElapsedNanos = timelineElapsedNanos,
             modifier = Modifier.fillMaxSize(),
             fullScreen = true,
         )
