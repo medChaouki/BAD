@@ -198,6 +198,7 @@ fun PracticeScreen(
                 ExerciseTimeline(
                     exercise = exercise,
                     exerciseElapsedNanos = uiState.exerciseElapsedNanos,
+                    previewFirstMeasure = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(190.dp),
@@ -558,6 +559,7 @@ private fun ExerciseTimeline(
     exerciseElapsedNanos: Long,
     modifier: Modifier = Modifier,
     fullScreen: Boolean = false,
+    previewFirstMeasure: Boolean = false,
 ) {
     val timing = remember(exercise) { ExerciseTiming(exercise) }
     val density = LocalDensity.current
@@ -584,6 +586,19 @@ private fun ExerciseTimeline(
             val judgementX = size.width * 0.28f
             val judgementLineHalfHeight =
                 ACCENT_NOTE_RADIUS_PX * JUDGEMENT_LINE_DIAMETER_MULTIPLIER
+            val previewMeasureStartX =
+                size.width * PREVIEW_MEASURE_START_FRACTION
+            val previewMeasureEndX =
+                size.width * PREVIEW_MEASURE_END_FRACTION
+            val previewNoteStartX =
+                size.width * PREVIEW_NOTE_START_FRACTION
+            val previewNoteEndX =
+                size.width * PREVIEW_NOTE_END_FRACTION
+            val previewNotes = exercise.notes.takeWhile { note ->
+                note.positionTicks < timing.measureDurationTicks
+            }
+            val firstPreviewNoteTicks = previewNotes.firstOrNull()?.positionTicks
+            val lastPreviewNoteTicks = previewNotes.lastOrNull()?.positionTicks
             drawLine(
                 color = lineColor,
                 start = Offset(0f, laneY),
@@ -592,17 +607,8 @@ private fun ExerciseTimeline(
                 cap = StrokeCap.Round,
             )
 
-            val measureDurationNanos =
-                timing.exerciseDurationNanos / exercise.measureCount
-            repeat(exercise.measureCount + 1) { measureIndex ->
-                val measureTimeNanos = measureDurationNanos * measureIndex
-                val x = timelineX(
-                    eventTimeNanos = measureTimeNanos,
-                    exerciseElapsedNanos = exerciseElapsedNanos,
-                    judgementX = judgementX,
-                    pixelsPerSecond = pixelsPerSecond,
-                )
-                if (x in 0f..size.width) {
+            if (previewFirstMeasure) {
+                listOf(previewMeasureStartX, previewMeasureEndX).forEach { x ->
                     drawLine(
                         color = measureColor,
                         start = Offset(x, laneY - 42f),
@@ -610,16 +616,52 @@ private fun ExerciseTimeline(
                         strokeWidth = 2f,
                     )
                 }
+            } else {
+                val measureDurationNanos =
+                    timing.exerciseDurationNanos / exercise.measureCount
+                repeat(exercise.measureCount + 1) { measureIndex ->
+                    val measureTimeNanos = measureDurationNanos * measureIndex
+                    val x = timelineX(
+                        eventTimeNanos = measureTimeNanos,
+                        exerciseElapsedNanos = exerciseElapsedNanos,
+                        judgementX = judgementX,
+                        pixelsPerSecond = pixelsPerSecond,
+                    )
+                    if (x in 0f..size.width) {
+                        drawLine(
+                            color = measureColor,
+                            start = Offset(x, laneY - 42f),
+                            end = Offset(x, laneY + 42f),
+                            strokeWidth = 2f,
+                        )
+                    }
+                }
             }
 
             exercise.notes.forEach { note ->
-                val x = timelineX(
-                    eventTimeNanos = timing.ticksToNanos(note.positionTicks),
-                    exerciseElapsedNanos = exerciseElapsedNanos,
-                    judgementX = judgementX,
-                    pixelsPerSecond = pixelsPerSecond,
-                )
-                if (x in -24f..size.width + 24f) {
+                if (
+                    previewFirstMeasure &&
+                    note.positionTicks >= timing.measureDurationTicks
+                ) {
+                    return@forEach
+                }
+                val x = if (previewFirstMeasure) {
+                    previewNoteX(
+                        positionTicks = note.positionTicks,
+                        firstNoteTicks = firstPreviewNoteTicks ?: note.positionTicks,
+                        lastNoteTicks = lastPreviewNoteTicks ?: note.positionTicks,
+                        startX = previewNoteStartX,
+                        endX = previewNoteEndX,
+                    )
+                } else {
+                    timelineX(
+                        eventTimeNanos = timing.ticksToNanos(note.positionTicks),
+                        exerciseElapsedNanos = exerciseElapsedNanos,
+                        judgementX = judgementX,
+                        pixelsPerSecond = pixelsPerSecond,
+                    )
+                }
+                if (x in 0f..size.width) {
                     drawCircle(
                         color = if (note.accent) accentColor else noteColor,
                         radius = if (note.accent) {
@@ -632,36 +674,54 @@ private fun ExerciseTimeline(
                 }
             }
 
-            drawLine(
-                color = judgementColor,
-                start = Offset(
-                    judgementX,
-                    (laneY - judgementLineHalfHeight).coerceAtLeast(0f),
-                ),
-                end = Offset(
-                    judgementX,
-                    (laneY + judgementLineHalfHeight).coerceAtMost(size.height),
-                ),
-                strokeWidth = 6f,
-                cap = StrokeCap.Round,
-            )
+            if (!previewFirstMeasure) {
+                drawLine(
+                    color = judgementColor,
+                    start = Offset(
+                        judgementX,
+                        (laneY - judgementLineHalfHeight).coerceAtLeast(0f),
+                    ),
+                    end = Offset(
+                        judgementX,
+                        (laneY + judgementLineHalfHeight).coerceAtMost(size.height),
+                    ),
+                    strokeWidth = 6f,
+                    cap = StrokeCap.Round,
+                )
+            }
 
-            timing.highlightedBeatTimeNanos(exerciseElapsedNanos)?.let { beatTimeNanos ->
-                val highlightX = timelineX(
-                    eventTimeNanos = beatTimeNanos,
-                    exerciseElapsedNanos = exerciseElapsedNanos,
-                    judgementX = judgementX,
-                    pixelsPerSecond = pixelsPerSecond,
-                )
-                drawCircle(
-                    color = beatHighlightColor,
-                    radius = 20f,
-                    center = Offset(highlightX, laneY),
-                    style = Stroke(width = 4f),
-                )
+            if (!previewFirstMeasure) {
+                timing.highlightedBeatTimeNanos(exerciseElapsedNanos)?.let { beatTimeNanos ->
+                    val highlightX = timelineX(
+                        eventTimeNanos = beatTimeNanos,
+                        exerciseElapsedNanos = exerciseElapsedNanos,
+                        judgementX = judgementX,
+                        pixelsPerSecond = pixelsPerSecond,
+                    )
+                    drawCircle(
+                        color = beatHighlightColor,
+                        radius = 20f,
+                        center = Offset(highlightX, laneY),
+                        style = Stroke(width = 4f),
+                    )
+                }
             }
         }
     }
+}
+
+private fun previewNoteX(
+    positionTicks: Long,
+    firstNoteTicks: Long,
+    lastNoteTicks: Long,
+    startX: Float,
+    endX: Float,
+): Float {
+    if (firstNoteTicks == lastNoteTicks) return (startX + endX) / 2f
+    val relativePosition =
+        (positionTicks - firstNoteTicks).toDouble() /
+            (lastNoteTicks - firstNoteTicks).toDouble()
+    return startX + ((endX - startX) * relativePosition).toFloat()
 }
 
 private fun timelineX(
@@ -805,3 +865,7 @@ private fun PracticePhase.isPlayerVisible(): Boolean = this in setOf(
 private const val NOTE_RADIUS_PX = 11f
 private const val ACCENT_NOTE_RADIUS_PX = 15f
 private const val JUDGEMENT_LINE_DIAMETER_MULTIPLIER = 10f
+private const val PREVIEW_MEASURE_START_FRACTION = 0.08f
+private const val PREVIEW_MEASURE_END_FRACTION = 0.92f
+private const val PREVIEW_NOTE_START_FRACTION = 0.20f
+private const val PREVIEW_NOTE_END_FRACTION = 0.80f

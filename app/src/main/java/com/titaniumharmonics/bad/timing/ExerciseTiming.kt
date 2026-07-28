@@ -18,6 +18,15 @@ class ExerciseTiming(
     val beatDurationNanos: Long =
         durationToNanos(quarterNotes = 4.0 / exercise.timeSignature.denominator)
 
+    val measureDurationTicks: Long =
+        Math.multiplyExact(
+            Math.multiplyExact(
+                exercise.ticksPerQuarterNote.toLong(),
+                exercise.timeSignature.numerator.toLong(),
+            ),
+            4L,
+        ) / exercise.timeSignature.denominator
+
     val beatHighlightDurationNanos: Long =
         (beatDurationNanos / BEAT_HIGHLIGHT_DURATION_DIVISOR).coerceAtLeast(1L)
 

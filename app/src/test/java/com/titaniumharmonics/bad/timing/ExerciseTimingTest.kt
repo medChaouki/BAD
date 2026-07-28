@@ -33,6 +33,7 @@ class ExerciseTimingTest {
         val timing = ExerciseTiming(exercise)
 
         assertEquals(600_000_000L, timing.beatDurationNanos)
+        assertEquals(1_920L, timing.measureDurationTicks)
         assertEquals(150_000_000L, timing.beatHighlightDurationNanos)
         assertEquals(2_400_000_000L, timing.countInDurationNanos)
         assertEquals(2_400_000_000L, timing.exerciseDurationNanos)

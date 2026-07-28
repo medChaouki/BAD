@@ -22,6 +22,7 @@ timeline. Microphone capture and hit detection are not implemented yet.
 - Accented first beat of each measure
 - Streaming `AudioTrack` output
 - Single-lane scrolling rhythm timeline
+- Static first-measure preview while an exercise is idle
 - BPM-scaled beat highlights at the judgement line
 - Full-screen practice playback with pause, resume, repeat, and stop controls
 - Collapsible per-exercise playback controls for tempo, count-in, measure
@@ -135,6 +136,11 @@ beat duration, so it scales with tempo.
 
 The judgement line is centered on the rhythm lane and is ten times the diameter
 of the largest note circle rather than spanning the full player height.
+
+While an exercise is idle, the timeline centers the notes from its first
+measure as a static musical preview while preserving their relative tick
+spacing. The judgement line is hidden in preview mode. Starting playback
+restores the judgement line and switches back to elapsed-time scrolling.
 
 Starting an inspection opens a dedicated full-screen player containing the
 timeline, current status, and playback controls. Initial playback waits two
