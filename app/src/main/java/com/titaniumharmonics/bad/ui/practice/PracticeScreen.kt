@@ -41,6 +41,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -224,6 +225,14 @@ private fun FullScreenPracticePlayer(
     onRepeat: () -> Unit,
     onStop: () -> Unit,
 ) {
+    val playerTextColor = if (
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
+    ) {
+        Color.White
+    } else {
+        Color.Black
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -239,6 +248,7 @@ private fun FullScreenPracticePlayer(
             text = sessionStatusText(uiState),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
+            color = playerTextColor,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
@@ -271,6 +281,7 @@ private fun FullScreenPracticePlayer(
                         PracticePhase.RESUME_COUNT_IN -> "Count-in"
                         else -> "Pause"
                     },
+                    color = playerTextColor,
                 )
             }
             OutlinedButton(
@@ -278,13 +289,19 @@ private fun FullScreenPracticePlayer(
                 enabled = uiState.phase != PracticePhase.PREPARING,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("Repeat")
+                Text(
+                    text = "Repeat",
+                    color = playerTextColor,
+                )
             }
             OutlinedButton(
                 onClick = onStop,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("Stop")
+                Text(
+                    text = "Stop",
+                    color = playerTextColor,
+                )
             }
         }
     }
@@ -354,16 +371,12 @@ private fun PlaybackSettingsCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "First beat only",
+                        text = "First note only",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                     )
                     Text(
-                        text = if (settings.downbeatsOnly) {
-                            "Exercise downbeats"
-                        } else {
-                            "Every exercise beat"
-                        },
+                        text = if (settings.downbeatsOnly) "Enabled" else "Disabled",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

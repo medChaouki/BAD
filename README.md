@@ -126,7 +126,8 @@ preparing, counting in, or running.
 Playback settings are collapsed by default. Tapping the exercise information
 card toggles them without changing the configured values.
 
-The downbeat-only option keeps the full count-in audible, then plays the
+The **First note only** option shows its enabled or disabled state beneath the
+label. When enabled, it keeps the full count-in audible, then plays the
 metronome only on the first beat of each exercise measure.
 
 During the exercise, every beat produces a brief green outline ring as it
@@ -143,13 +144,14 @@ spacing. The judgement line is hidden in preview mode. Starting playback
 restores the judgement line and switches back to elapsed-time scrolling.
 
 Starting an inspection opens a dedicated full-screen player containing the
-timeline, current status, and playback controls. Initial playback waits two
-seconds after opening the player before starting the count-in or exercise,
-giving the device time to prepare the screen and audio path. Pause freezes both
-metronome audio and monotonic timeline progress. When count-in is enabled,
-Resume plays the configured count-in while the timeline remains frozen, then
-continues from the paused position. Repeat restarts with the configured
-count-in, and Stop returns to the exercise settings.
+timeline, current status, and playback controls. Player text adapts to the
+active theme, using white in dark themes and black in light themes. Initial
+playback waits two seconds after opening the player before starting the count-in
+or exercise, giving the device time to prepare the screen and audio path. Pause
+freezes both metronome audio and monotonic timeline progress. When count-in is
+enabled, Resume plays the configured count-in while the timeline remains
+frozen, then continues from the paused position. Repeat restarts with the
+configured count-in, and Stop returns to the exercise settings.
 
 When microphone detection and hit matching are added, timing feedback will use
 a green ring for on-time hits, a blue ring for early hits, and a red ring for
