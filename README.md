@@ -153,7 +153,10 @@ frozen at the paused position, then continues from there. During an initial or
 Repeat count-in, the playback timeline waits at one quarter note before
 exercise time zero. It begins scrolling during the final quarter note of the
 count-in, reaches time zero with the exercise audio, and continues without a
-visual jump. Stop returns to the exercise settings.
+visual jump. Once exercise playback begins, the Player shows the current
+one-based measure and total measure count beneath the status. It preserves that
+progress while paused or during Resume count-in and shows the final measure on
+completion. Stop returns to the exercise settings.
 
 When microphone detection and hit matching are added, timing feedback will use
 a green ring for on-time hits, a blue ring for early hits, and a red ring for

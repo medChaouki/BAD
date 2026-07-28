@@ -58,6 +58,16 @@ class ExerciseTimingTest {
     }
 
     @Test
+    fun measureNumberAt_tracksPlaybackProgressAndClampsAtLastMeasure() {
+        val fourMeasureTiming = ExerciseTiming(exercise.copy(measureCount = 4))
+
+        assertEquals(1, fourMeasureTiming.measureNumberAt(0L))
+        assertEquals(1, fourMeasureTiming.measureNumberAt(2_399_999_999L))
+        assertEquals(2, fourMeasureTiming.measureNumberAt(2_400_000_000L))
+        assertEquals(4, fourMeasureTiming.measureNumberAt(9_600_000_000L))
+    }
+
+    @Test
     fun progress_transitionsAtCountInAndExerciseBoundaries() {
         val calculator = SessionProgressCalculator(ExerciseTiming(exercise))
 

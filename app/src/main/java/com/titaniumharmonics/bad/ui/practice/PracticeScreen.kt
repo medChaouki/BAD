@@ -248,6 +248,20 @@ private fun FullScreenPracticePlayer(
     } else {
         Color.Black
     }
+    val measureProgressText = if (
+        uiState.exerciseElapsedNanos >= 0L &&
+        uiState.phase in setOf(
+            PracticePhase.RUNNING,
+            PracticePhase.PAUSED,
+            PracticePhase.RESUME_COUNT_IN,
+            PracticePhase.COMPLETED,
+        )
+    ) {
+        "Measure ${timing.measureNumberAt(uiState.exerciseElapsedNanos)} " +
+            "of ${exercise.measureCount}"
+    } else {
+        null
+    }
 
     Box(
         modifier = Modifier
@@ -260,16 +274,28 @@ private fun FullScreenPracticePlayer(
             modifier = Modifier.fillMaxSize(),
             fullScreen = true,
         )
-        Text(
-            text = sessionStatusText(uiState),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = playerTextColor,
+        Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
                 .padding(top = 24.dp),
-        )
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = sessionStatusText(uiState),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = playerTextColor,
+            )
+            measureProgressText?.let { progressText ->
+                Text(
+                    text = progressText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = playerTextColor,
+                )
+            }
+        }
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)

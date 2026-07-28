@@ -72,6 +72,14 @@ class ExerciseTiming(
         )
     }
 
+    fun measureNumberAt(exerciseElapsedNanos: Long): Int {
+        val measureDurationNanos =
+            (exerciseDurationNanos / exercise.measureCount).coerceAtLeast(1L)
+        return ((exerciseElapsedNanos.coerceAtLeast(0L) / measureDurationNanos) + 1L)
+            .coerceAtMost(exercise.measureCount.toLong())
+            .toInt()
+    }
+
     fun highlightedBeatTimeNanos(exerciseElapsedNanos: Long): Long? {
         if (exerciseElapsedNanos !in 0 until exerciseDurationNanos) return null
 
