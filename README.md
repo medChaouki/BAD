@@ -1,5 +1,7 @@
 # B.A.D. — Beat Accuracy Detector
 
+![B.A.D. — Beat Accuracy Detector](docs/assets/bad-banner.png)
+
 > With B.A.D., the beat approves you.
 
 B.A.D. is an Android drum-practice application that will listen to drum or
@@ -25,6 +27,7 @@ timeline. Microphone capture and hit detection are not implemented yet.
 - Static first-measure preview while an exercise is idle
 - BPM-scaled beat highlights at the judgement line
 - Full-screen practice playback with pause, resume, repeat, and stop controls
+- Branded adaptive launcher icon and orientation-aware startup screen
 - Collapsible per-exercise playback controls for tempo, count-in, measure
   count, and downbeat-only clicks
 - Lifecycle-aware playback cleanup
