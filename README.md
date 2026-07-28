@@ -1,5 +1,7 @@
 # B.A.D. — Beat Accuracy Detector
 
+![B.A.D. — Beat Accuracy Detector](docs/assets/bad-banner.png)
+
 > With B.A.D., the beat approves you.
 
 B.A.D. is an Android drum-practice application that will listen to drum or
@@ -164,14 +166,6 @@ a green ring for on-time hits, a blue ring for early hits, and a red ring for
 late hits. Missed notes will show a gray `X` at the expected-note position, and
 extra hits will show a red `X` at the detected-hit position. Extra hits remain
 a distinct result category for accurate session statistics.
-
-## Branding
-
-The launcher uses the B.A.D. logo as an adaptive icon on a black background.
-Android's mandatory system splash uses a transparent icon on black so it blends
-into the one-second, edge-to-edge branded startup screen. Portrait and
-landscape artwork are selected automatically and cropped proportionally
-without stretching.
 
 ## Continuous integration
 
