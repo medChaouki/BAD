@@ -33,9 +33,38 @@ class ExerciseTimingTest {
         val timing = ExerciseTiming(exercise)
 
         assertEquals(600_000_000L, timing.beatDurationNanos)
+        assertEquals(600_000_000L, timing.quarterNoteDurationNanos)
+        assertEquals(1_920L, timing.measureDurationTicks)
+        assertEquals(150_000_000L, timing.beatHighlightDurationNanos)
         assertEquals(2_400_000_000L, timing.countInDurationNanos)
         assertEquals(2_400_000_000L, timing.exerciseDurationNanos)
         assertEquals(4_800_000_000L, timing.totalDurationNanos)
+    }
+
+    @Test
+    fun beatHighlight_returnsCurrentBeatTimeForFirstQuarterOfEveryBeat() {
+        val timing = ExerciseTiming(exercise)
+
+        assertEquals(null, timing.highlightedBeatTimeNanos(-1L))
+        assertEquals(0L, timing.highlightedBeatTimeNanos(0L))
+        assertEquals(0L, timing.highlightedBeatTimeNanos(149_999_999L))
+        assertEquals(null, timing.highlightedBeatTimeNanos(150_000_000L))
+        assertEquals(null, timing.highlightedBeatTimeNanos(599_999_999L))
+        assertEquals(600_000_000L, timing.highlightedBeatTimeNanos(600_000_000L))
+        assertEquals(
+            null,
+            timing.highlightedBeatTimeNanos(timing.exerciseDurationNanos),
+        )
+    }
+
+    @Test
+    fun measureNumberAt_tracksPlaybackProgressAndClampsAtLastMeasure() {
+        val fourMeasureTiming = ExerciseTiming(exercise.copy(measureCount = 4))
+
+        assertEquals(1, fourMeasureTiming.measureNumberAt(0L))
+        assertEquals(1, fourMeasureTiming.measureNumberAt(2_399_999_999L))
+        assertEquals(2, fourMeasureTiming.measureNumberAt(2_400_000_000L))
+        assertEquals(4, fourMeasureTiming.measureNumberAt(9_600_000_000L))
     }
 
     @Test

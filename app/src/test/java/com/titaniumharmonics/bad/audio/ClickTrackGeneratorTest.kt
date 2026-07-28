@@ -47,4 +47,51 @@ class ClickTrackGeneratorTest {
             .maxOf { abs(it.toInt()) }
         assertEquals(0, betweenBeatsPeak)
     }
+
+    @Test
+    fun generate_downbeatsOnlyKeepsFullCountInAndMutesOtherExerciseBeats() {
+        val exerciseWithCountIn = exercise.copy(countInMeasures = 1)
+        val samples = ClickTrackGenerator.generate(
+            exercise = exerciseWithCountIn,
+            downbeatsOnly = true,
+        )
+        val samplesPerBeat = 24_000
+
+        repeat(5) { beat ->
+            assertTrue(
+                "No click detected on beat ${beat + 1}",
+                peakNearBeat(samples, beat, samplesPerBeat) > 10_000,
+            )
+        }
+        repeat(3) { exerciseBeatOffset ->
+            val beat = 5 + exerciseBeatOffset
+            assertEquals(0, peakNearBeat(samples, beat, samplesPerBeat))
+        }
+    }
+
+    @Test
+    fun generateCountIn_containsOnlyTheConfiguredAllBeatsCountIn() {
+        val exerciseWithCountIn = exercise.copy(countInMeasures = 1)
+        val samples = ClickTrackGenerator.generateCountIn(exerciseWithCountIn)
+        val samplesPerBeat = 24_000
+
+        assertEquals(96_000, samples.size)
+        repeat(4) { beat ->
+            assertTrue(
+                "No count-in click detected on beat ${beat + 1}",
+                peakNearBeat(samples, beat, samplesPerBeat) > 10_000,
+            )
+        }
+    }
+
+    private fun peakNearBeat(
+        samples: ShortArray,
+        beat: Int,
+        samplesPerBeat: Int,
+    ): Int {
+        val beatStart = beat * samplesPerBeat
+        return samples
+            .sliceArray(beatStart until beatStart + 1_200)
+            .maxOf { abs(it.toInt()) }
+    }
 }

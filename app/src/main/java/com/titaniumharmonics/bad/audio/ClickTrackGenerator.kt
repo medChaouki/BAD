@@ -17,32 +17,87 @@ object ClickTrackGenerator {
     fun generate(
         exercise: Exercise,
         sampleRateHz: Int = DEFAULT_SAMPLE_RATE_HZ,
+        downbeatsOnly: Boolean = false,
     ): ShortArray {
         require(sampleRateHz > 0) { "sampleRateHz must be greater than zero." }
 
         val timing = ExerciseTiming(exercise)
-        val sampleCount = ceil(
-            timing.totalDurationNanos.toDouble() *
-                sampleRateHz / NANOS_PER_SECOND,
-        ).toLong()
-        val bufferByteCount = sampleCount * BYTES_PER_SAMPLE
-        require(sampleCount <= Int.MAX_VALUE && bufferByteCount <= MAX_BUFFER_BYTES) {
-            "Exercise is too long for the static metronome buffer."
-        }
-
-        val samples = ShortArray(sampleCount.toInt())
         val totalMeasureCount =
             exercise.countInMeasures.toLong() + exercise.measureCount
         val totalBeatCount = Math.multiplyExact(
             totalMeasureCount,
             exercise.timeSignature.numerator.toLong(),
         )
-        for (beatIndex in 0 until totalBeatCount) {
+        val countInBeatCount = Math.multiplyExact(
+            exercise.countInMeasures.toLong(),
+            exercise.timeSignature.numerator.toLong(),
+        )
+        return generateBeatTrack(
+            durationNanos = timing.totalDurationNanos,
+            beatCount = totalBeatCount,
+            countInBeatCount = countInBeatCount,
+            beatsPerMeasure = exercise.timeSignature.numerator,
+            beatTimeNanos = timing::beatTimeNanos,
+            sampleRateHz = sampleRateHz,
+            downbeatsOnly = downbeatsOnly,
+        )
+    }
+
+    fun generateCountIn(
+        exercise: Exercise,
+        sampleRateHz: Int = DEFAULT_SAMPLE_RATE_HZ,
+    ): ShortArray {
+        require(sampleRateHz > 0) { "sampleRateHz must be greater than zero." }
+        require(exercise.countInMeasures > 0) {
+            "Exercise must have at least one count-in measure."
+        }
+
+        val timing = ExerciseTiming(exercise)
+        val countInBeatCount = Math.multiplyExact(
+            exercise.countInMeasures.toLong(),
+            exercise.timeSignature.numerator.toLong(),
+        )
+        return generateBeatTrack(
+            durationNanos = timing.countInDurationNanos,
+            beatCount = countInBeatCount,
+            countInBeatCount = countInBeatCount,
+            beatsPerMeasure = exercise.timeSignature.numerator,
+            beatTimeNanos = timing::beatTimeNanos,
+            sampleRateHz = sampleRateHz,
+            downbeatsOnly = false,
+        )
+    }
+
+    private fun generateBeatTrack(
+        durationNanos: Long,
+        beatCount: Long,
+        countInBeatCount: Long,
+        beatsPerMeasure: Int,
+        beatTimeNanos: (Long) -> Long,
+        sampleRateHz: Int,
+        downbeatsOnly: Boolean,
+    ): ShortArray {
+        val sampleCount = ceil(
+            durationNanos.toDouble() * sampleRateHz / NANOS_PER_SECOND,
+        ).toLong()
+        val bufferByteCount = sampleCount * BYTES_PER_SAMPLE
+        require(sampleCount <= Int.MAX_VALUE && bufferByteCount <= MAX_BUFFER_BYTES) {
+            "Metronome audio is too long for the static sample buffer."
+        }
+
+        val samples = ShortArray(sampleCount.toInt())
+        for (beatIndex in 0 until beatCount) {
+            val isCountInBeat = beatIndex < countInBeatCount
+            val exerciseBeatIndex = beatIndex - countInBeatCount
+            val isExerciseDownbeat =
+                exerciseBeatIndex % beatsPerMeasure == 0L
+            if (downbeatsOnly && !isCountInBeat && !isExerciseDownbeat) continue
+
             val startSample = (
-                timing.beatTimeNanos(beatIndex).toDouble() *
+                beatTimeNanos(beatIndex).toDouble() *
                     sampleRateHz / NANOS_PER_SECOND
                 ).roundToInt()
-            val isAccent = beatIndex % exercise.timeSignature.numerator == 0L
+            val isAccent = beatIndex % beatsPerMeasure == 0L
             mixClick(
                 samples = samples,
                 startSample = startSample,

@@ -1,7 +1,9 @@
 package com.titaniumharmonics.bad.ui.practice
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,14 +25,23 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -40,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.titaniumharmonics.bad.exercise.Exercise
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
+import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.ExpectedNote
 import com.titaniumharmonics.bad.exercise.TimeSignature
 import com.titaniumharmonics.bad.timing.ExerciseTiming
@@ -71,6 +85,15 @@ fun PracticeRoute(
         onUnload = viewModel::unloadExercise,
         onStart = viewModel::startPlayback,
         onStop = viewModel::stopPlayback,
+        onPause = viewModel::pausePlayback,
+        onResume = viewModel::resumePlayback,
+        onRepeat = viewModel::restartPlayback,
+        onDecreaseTempo = viewModel::decreaseTempo,
+        onIncreaseTempo = viewModel::increaseTempo,
+        onCountInEnabledChange = viewModel::setCountInEnabled,
+        onDownbeatsOnlyChange = viewModel::setDownbeatsOnly,
+        onDecreaseMeasureCount = viewModel::decreaseMeasureCount,
+        onIncreaseMeasureCount = viewModel::increaseMeasureCount,
     )
 }
 
@@ -82,7 +105,32 @@ fun PracticeScreen(
     onUnload: () -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onRepeat: () -> Unit,
+    onDecreaseTempo: () -> Unit,
+    onIncreaseTempo: () -> Unit,
+    onCountInEnabledChange: (Boolean) -> Unit,
+    onDownbeatsOnlyChange: (Boolean) -> Unit,
+    onDecreaseMeasureCount: () -> Unit,
+    onIncreaseMeasureCount: () -> Unit,
 ) {
+    val playbackExercise = uiState.playbackExercise
+    var playbackSettingsExpanded by rememberSaveable(uiState.exercise?.id) {
+        mutableStateOf(false)
+    }
+    if (playbackExercise != null && uiState.phase.isPlayerVisible()) {
+        FullScreenPracticePlayer(
+            exercise = playbackExercise,
+            uiState = uiState,
+            onPause = onPause,
+            onResume = onResume,
+            onRepeat = onRepeat,
+            onStop = onStop,
+        )
+        return
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -114,17 +162,44 @@ fun PracticeScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            val exercise = uiState.exercise
+            val exercise = playbackExercise
             if (exercise == null) {
                 EmptyExerciseCard(
                     uiState = uiState,
                     onLoad = onLoad,
                 )
             } else {
-                ExerciseCard(exercise)
+                ExerciseCard(
+                    exercise = exercise,
+                    playbackSettingsExpanded = playbackSettingsExpanded,
+                    onTogglePlaybackSettings = {
+                        playbackSettingsExpanded = !playbackSettingsExpanded
+                    },
+                )
+                AnimatedVisibility(visible = playbackSettingsExpanded) {
+                    uiState.playbackSettings?.let { playbackSettings ->
+                        PlaybackSettingsCard(
+                            settings = playbackSettings,
+                            enabled = uiState.phase !in setOf(
+                                PracticePhase.PREPARING,
+                                PracticePhase.COUNTING_IN,
+                                PracticePhase.RUNNING,
+                                PracticePhase.PAUSED,
+                                PracticePhase.RESUME_COUNT_IN,
+                            ),
+                            onDecreaseTempo = onDecreaseTempo,
+                            onIncreaseTempo = onIncreaseTempo,
+                            onCountInEnabledChange = onCountInEnabledChange,
+                            onDownbeatsOnlyChange = onDownbeatsOnlyChange,
+                            onDecreaseMeasureCount = onDecreaseMeasureCount,
+                            onIncreaseMeasureCount = onIncreaseMeasureCount,
+                        )
+                    }
+                }
                 ExerciseTimeline(
                     exercise = exercise,
                     exerciseElapsedNanos = uiState.exerciseElapsedNanos,
+                    previewFirstMeasure = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(190.dp),
@@ -137,6 +212,275 @@ fun PracticeScreen(
                     onUnload = onUnload,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun FullScreenPracticePlayer(
+    exercise: Exercise,
+    uiState: PracticeUiState,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onRepeat: () -> Unit,
+    onStop: () -> Unit,
+) {
+    val timing = remember(exercise) { ExerciseTiming(exercise) }
+    val timelineElapsedNanos = when (uiState.phase) {
+        PracticePhase.PREPARING -> {
+            if (exercise.countInMeasures > 0) {
+                -timing.quarterNoteDurationNanos
+            } else {
+                0L
+            }
+        }
+        PracticePhase.COUNTING_IN -> {
+            uiState.exerciseElapsedNanos.coerceAtLeast(
+                -timing.quarterNoteDurationNanos,
+            )
+        }
+        else -> uiState.exerciseElapsedNanos
+    }
+    val playerTextColor = if (
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
+    ) {
+        Color.White
+    } else {
+        Color.Black
+    }
+    val measureProgressText = if (
+        uiState.exerciseElapsedNanos >= 0L &&
+        uiState.phase in setOf(
+            PracticePhase.RUNNING,
+            PracticePhase.PAUSED,
+            PracticePhase.RESUME_COUNT_IN,
+            PracticePhase.COMPLETED,
+        )
+    ) {
+        "Measure ${timing.measureNumberAt(uiState.exerciseElapsedNanos)} " +
+            "of ${exercise.measureCount}"
+    } else {
+        null
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        ExerciseTimeline(
+            exercise = exercise,
+            exerciseElapsedNanos = timelineElapsedNanos,
+            modifier = Modifier.fillMaxSize(),
+            fullScreen = true,
+        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = sessionStatusText(uiState),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = playerTextColor,
+            )
+            measureProgressText?.let { progressText ->
+                Text(
+                    text = progressText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = playerTextColor,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Button(
+                onClick = if (uiState.phase == PracticePhase.PAUSED) {
+                    onResume
+                } else {
+                    onPause
+                },
+                enabled = uiState.phase in setOf(
+                    PracticePhase.COUNTING_IN,
+                    PracticePhase.RUNNING,
+                    PracticePhase.PAUSED,
+                ),
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    when (uiState.phase) {
+                        PracticePhase.PAUSED -> "Resume"
+                        PracticePhase.RESUME_COUNT_IN -> "Count-in"
+                        else -> "Pause"
+                    },
+                    color = playerTextColor,
+                )
+            }
+            OutlinedButton(
+                onClick = onRepeat,
+                enabled = uiState.phase != PracticePhase.PREPARING,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = "Repeat",
+                    color = playerTextColor,
+                )
+            }
+            OutlinedButton(
+                onClick = onStop,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = "Stop",
+                    color = playerTextColor,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackSettingsCard(
+    settings: ExercisePlaybackSettings,
+    enabled: Boolean,
+    onDecreaseTempo: () -> Unit,
+    onIncreaseTempo: () -> Unit,
+    onCountInEnabledChange: (Boolean) -> Unit,
+    onDownbeatsOnlyChange: (Boolean) -> Unit,
+    onDecreaseMeasureCount: () -> Unit,
+    onIncreaseMeasureCount: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = "Playback settings",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            StepperSetting(
+                label = "Tempo",
+                value = "${settings.tempoBpm} BPM",
+                decreaseEnabled = enabled &&
+                    settings.tempoBpm > ExercisePlaybackSettings.MIN_TEMPO_BPM,
+                increaseEnabled = enabled &&
+                    settings.tempoBpm < ExercisePlaybackSettings.MAX_TEMPO_BPM,
+                onDecrease = onDecreaseTempo,
+                onIncrease = onIncreaseTempo,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Count-in",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = if (settings.countInEnabled) "Enabled" else "Disabled",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = settings.countInEnabled,
+                    onCheckedChange = onCountInEnabledChange,
+                    enabled = enabled,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "First note only",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = if (settings.downbeatsOnly) "Enabled" else "Disabled",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = settings.downbeatsOnly,
+                    onCheckedChange = onDownbeatsOnlyChange,
+                    enabled = enabled,
+                )
+            }
+            StepperSetting(
+                label = "Measures",
+                value = settings.measureCount.toString(),
+                decreaseEnabled = enabled &&
+                    settings.measureCount > ExercisePlaybackSettings.MIN_MEASURE_COUNT,
+                increaseEnabled = enabled &&
+                    settings.measureCount < ExercisePlaybackSettings.MAX_MEASURE_COUNT,
+                onDecrease = onDecreaseMeasureCount,
+                onIncrease = onIncreaseMeasureCount,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StepperSetting(
+    label: String,
+    value: String,
+    decreaseEnabled: Boolean,
+    increaseEnabled: Boolean,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(
+            onClick = onDecrease,
+            enabled = decreaseEnabled,
+        ) {
+            Text("−")
+        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .width(88.dp)
+                .padding(horizontal = 8.dp),
+        )
+        OutlinedButton(
+            onClick = onIncrease,
+            enabled = increaseEnabled,
+        ) {
+            Text("+")
         }
     }
 }
@@ -183,8 +527,13 @@ private fun EmptyExerciseCard(
 }
 
 @Composable
-private fun ExerciseCard(exercise: Exercise) {
+private fun ExerciseCard(
+    exercise: Exercise,
+    playbackSettingsExpanded: Boolean,
+    onTogglePlaybackSettings: () -> Unit,
+) {
     Card(
+        onClick = onTogglePlaybackSettings,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
     ) {
@@ -216,6 +565,26 @@ private fun ExerciseCard(exercise: Exercise) {
                     value = exercise.measureCount.toString(),
                 )
             }
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (playbackSettingsExpanded) {
+                        "Hide playback settings"
+                    } else {
+                        "Show playback settings"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = if (playbackSettingsExpanded) "▲" else "▼",
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }
@@ -244,6 +613,8 @@ private fun ExerciseTimeline(
     exercise: Exercise,
     exerciseElapsedNanos: Long,
     modifier: Modifier = Modifier,
+    fullScreen: Boolean = false,
+    previewFirstMeasure: Boolean = false,
 ) {
     val timing = remember(exercise) { ExerciseTiming(exercise) }
     val density = LocalDensity.current
@@ -253,10 +624,12 @@ private fun ExerciseTimeline(
     val judgementColor = MaterialTheme.colorScheme.error
     val noteColor = MaterialTheme.colorScheme.primary
     val accentColor = MaterialTheme.colorScheme.tertiary
+    val beatHighlightColor = Color(0xFF43A047)
     val backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow
 
     Card(
         modifier = modifier,
+        shape = if (fullScreen) RoundedCornerShape(0.dp) else MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
     ) {
         Canvas(
@@ -266,6 +639,21 @@ private fun ExerciseTimeline(
         ) {
             val laneY = size.height * 0.55f
             val judgementX = size.width * 0.28f
+            val judgementLineHalfHeight =
+                ACCENT_NOTE_RADIUS_PX * JUDGEMENT_LINE_DIAMETER_MULTIPLIER
+            val previewMeasureStartX =
+                size.width * PREVIEW_MEASURE_START_FRACTION
+            val previewMeasureEndX =
+                size.width * PREVIEW_MEASURE_END_FRACTION
+            val previewNoteStartX =
+                size.width * PREVIEW_NOTE_START_FRACTION
+            val previewNoteEndX =
+                size.width * PREVIEW_NOTE_END_FRACTION
+            val previewNotes = exercise.notes.takeWhile { note ->
+                note.positionTicks < timing.measureDurationTicks
+            }
+            val firstPreviewNoteTicks = previewNotes.firstOrNull()?.positionTicks
+            val lastPreviewNoteTicks = previewNotes.lastOrNull()?.positionTicks
             drawLine(
                 color = lineColor,
                 start = Offset(0f, laneY),
@@ -274,17 +662,8 @@ private fun ExerciseTimeline(
                 cap = StrokeCap.Round,
             )
 
-            val measureDurationNanos =
-                timing.exerciseDurationNanos / exercise.measureCount
-            repeat(exercise.measureCount + 1) { measureIndex ->
-                val measureTimeNanos = measureDurationNanos * measureIndex
-                val x = timelineX(
-                    eventTimeNanos = measureTimeNanos,
-                    exerciseElapsedNanos = exerciseElapsedNanos,
-                    judgementX = judgementX,
-                    pixelsPerSecond = pixelsPerSecond,
-                )
-                if (x in 0f..size.width) {
+            if (previewFirstMeasure) {
+                listOf(previewMeasureStartX, previewMeasureEndX).forEach { x ->
                     drawLine(
                         color = measureColor,
                         start = Offset(x, laneY - 42f),
@@ -292,33 +671,112 @@ private fun ExerciseTimeline(
                         strokeWidth = 2f,
                     )
                 }
+            } else {
+                val measureDurationNanos =
+                    timing.exerciseDurationNanos / exercise.measureCount
+                repeat(exercise.measureCount + 1) { measureIndex ->
+                    val measureTimeNanos = measureDurationNanos * measureIndex
+                    val x = timelineX(
+                        eventTimeNanos = measureTimeNanos,
+                        exerciseElapsedNanos = exerciseElapsedNanos,
+                        judgementX = judgementX,
+                        pixelsPerSecond = pixelsPerSecond,
+                    )
+                    if (x in 0f..size.width) {
+                        drawLine(
+                            color = measureColor,
+                            start = Offset(x, laneY - 42f),
+                            end = Offset(x, laneY + 42f),
+                            strokeWidth = 2f,
+                        )
+                    }
+                }
             }
 
             exercise.notes.forEach { note ->
-                val x = timelineX(
-                    eventTimeNanos = timing.ticksToNanos(note.positionTicks),
-                    exerciseElapsedNanos = exerciseElapsedNanos,
-                    judgementX = judgementX,
-                    pixelsPerSecond = pixelsPerSecond,
-                )
-                if (x in -24f..size.width + 24f) {
+                if (
+                    previewFirstMeasure &&
+                    note.positionTicks >= timing.measureDurationTicks
+                ) {
+                    return@forEach
+                }
+                val x = if (previewFirstMeasure) {
+                    previewNoteX(
+                        positionTicks = note.positionTicks,
+                        firstNoteTicks = firstPreviewNoteTicks ?: note.positionTicks,
+                        lastNoteTicks = lastPreviewNoteTicks ?: note.positionTicks,
+                        startX = previewNoteStartX,
+                        endX = previewNoteEndX,
+                    )
+                } else {
+                    timelineX(
+                        eventTimeNanos = timing.ticksToNanos(note.positionTicks),
+                        exerciseElapsedNanos = exerciseElapsedNanos,
+                        judgementX = judgementX,
+                        pixelsPerSecond = pixelsPerSecond,
+                    )
+                }
+                if (x in 0f..size.width) {
                     drawCircle(
                         color = if (note.accent) accentColor else noteColor,
-                        radius = if (note.accent) 15f else 11f,
+                        radius = if (note.accent) {
+                            ACCENT_NOTE_RADIUS_PX
+                        } else {
+                            NOTE_RADIUS_PX
+                        },
                         center = Offset(x, laneY),
                     )
                 }
             }
 
-            drawLine(
-                color = judgementColor,
-                start = Offset(judgementX, 0f),
-                end = Offset(judgementX, size.height),
-                strokeWidth = 6f,
-                cap = StrokeCap.Round,
-            )
+            if (!previewFirstMeasure) {
+                drawLine(
+                    color = judgementColor,
+                    start = Offset(
+                        judgementX,
+                        (laneY - judgementLineHalfHeight).coerceAtLeast(0f),
+                    ),
+                    end = Offset(
+                        judgementX,
+                        (laneY + judgementLineHalfHeight).coerceAtMost(size.height),
+                    ),
+                    strokeWidth = 6f,
+                    cap = StrokeCap.Round,
+                )
+            }
+
+            if (!previewFirstMeasure) {
+                timing.highlightedBeatTimeNanos(exerciseElapsedNanos)?.let { beatTimeNanos ->
+                    val highlightX = timelineX(
+                        eventTimeNanos = beatTimeNanos,
+                        exerciseElapsedNanos = exerciseElapsedNanos,
+                        judgementX = judgementX,
+                        pixelsPerSecond = pixelsPerSecond,
+                    )
+                    drawCircle(
+                        color = beatHighlightColor,
+                        radius = 20f,
+                        center = Offset(highlightX, laneY),
+                        style = Stroke(width = 4f),
+                    )
+                }
+            }
         }
     }
+}
+
+private fun previewNoteX(
+    positionTicks: Long,
+    firstNoteTicks: Long,
+    lastNoteTicks: Long,
+    startX: Float,
+    endX: Float,
+): Float {
+    if (firstNoteTicks == lastNoteTicks) return (startX + endX) / 2f
+    val relativePosition =
+        (positionTicks - firstNoteTicks).toDouble() /
+            (lastNoteTicks - firstNoteTicks).toDouble()
+    return startX + ((endX - startX) * relativePosition).toFloat()
 }
 
 private fun timelineX(
@@ -335,20 +793,9 @@ private fun timelineX(
 
 @Composable
 private fun SessionStatus(uiState: PracticeUiState) {
-    val statusText = when (uiState.phase) {
-        PracticePhase.READY -> "Ready for inspection."
-        PracticePhase.PREPARING -> "Calibrating confidence…"
-        PracticePhase.COUNTING_IN -> "Count-in: ${uiState.countInBeatsRemaining}"
-        PracticePhase.RUNNING -> "Inspection in progress."
-        PracticePhase.COMPLETED -> "Inspection complete."
-        PracticePhase.ERROR -> "Rhythm subsystem objected."
-        PracticePhase.UNLOADED -> "No exercise loaded."
-        PracticePhase.LOADING -> "Loading exercise…"
-    }
-
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            text = statusText,
+            text = sessionStatusText(uiState),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
@@ -373,6 +820,8 @@ private fun SessionControls(
         PracticePhase.PREPARING,
         PracticePhase.COUNTING_IN,
         PracticePhase.RUNNING,
+        PracticePhase.PAUSED,
+        PracticePhase.RESUME_COUNT_IN,
     )
 
     Row(modifier = Modifier.fillMaxWidth()) {
@@ -425,6 +874,7 @@ private fun PracticeScreenPreview() {
         PracticeScreen(
             uiState = PracticeUiState(
                 exercise = previewExercise,
+                playbackSettings = ExercisePlaybackSettings.fromExercise(previewExercise),
                 phase = PracticePhase.READY,
                 exerciseElapsedNanos = -2_400_000_000L,
             ),
@@ -432,6 +882,45 @@ private fun PracticeScreenPreview() {
             onUnload = {},
             onStart = {},
             onStop = {},
+            onPause = {},
+            onResume = {},
+            onRepeat = {},
+            onDecreaseTempo = {},
+            onIncreaseTempo = {},
+            onCountInEnabledChange = {},
+            onDownbeatsOnlyChange = {},
+            onDecreaseMeasureCount = {},
+            onIncreaseMeasureCount = {},
         )
     }
 }
+
+private fun sessionStatusText(uiState: PracticeUiState): String = when (uiState.phase) {
+    PracticePhase.READY -> "Ready for inspection."
+    PracticePhase.PREPARING -> "Calibrating confidence…"
+    PracticePhase.COUNTING_IN -> "Count-in: ${uiState.countInBeatsRemaining}"
+    PracticePhase.RUNNING -> "Inspection in progress."
+    PracticePhase.PAUSED -> "Inspection paused."
+    PracticePhase.RESUME_COUNT_IN -> "Count-in: ${uiState.countInBeatsRemaining}"
+    PracticePhase.COMPLETED -> "Inspection complete."
+    PracticePhase.ERROR -> "Rhythm subsystem objected."
+    PracticePhase.UNLOADED -> "No exercise loaded."
+    PracticePhase.LOADING -> "Loading exercise…"
+}
+
+private fun PracticePhase.isPlayerVisible(): Boolean = this in setOf(
+    PracticePhase.PREPARING,
+    PracticePhase.COUNTING_IN,
+    PracticePhase.RUNNING,
+    PracticePhase.PAUSED,
+    PracticePhase.RESUME_COUNT_IN,
+    PracticePhase.COMPLETED,
+)
+
+private const val NOTE_RADIUS_PX = 11f
+private const val ACCENT_NOTE_RADIUS_PX = 15f
+private const val JUDGEMENT_LINE_DIAMETER_MULTIPLIER = 10f
+private const val PREVIEW_MEASURE_START_FRACTION = 0.08f
+private const val PREVIEW_MEASURE_END_FRACTION = 0.92f
+private const val PREVIEW_NOTE_START_FRACTION = 0.20f
+private const val PREVIEW_NOTE_END_FRACTION = 0.80f

@@ -22,6 +22,11 @@ timeline. Microphone capture and hit detection are not implemented yet.
 - Accented first beat of each measure
 - Streaming `AudioTrack` output
 - Single-lane scrolling rhythm timeline
+- Static first-measure preview while an exercise is idle
+- BPM-scaled beat highlights at the judgement line
+- Full-screen practice playback with pause, resume, repeat, and stop controls
+- Collapsible per-exercise playback controls for tempo, count-in, measure
+  count, and downbeat-only clicks
 - Lifecycle-aware playback cleanup
 - JVM tests for exercise parsing, validation, timing, and click generation
 - GitHub Actions verification with downloadable debug APKs
@@ -111,6 +116,53 @@ that clock; Compose animation is not the authoritative timing source.
 Metronome clicks are sample-aligned relative to one another. Physical output
 latency still depends on the Android device and audio route. Output-latency
 calibration has not been implemented yet.
+
+Playback settings can be adjusted while an exercise is idle. They remain in
+effect for repeated runs of that exercise and reset when another exercise is
+loaded. Longer sessions repeat the exercise pattern; shorter sessions truncate
+it at the selected measure boundary. Settings are locked while playback is
+preparing, counting in, or running.
+
+Playback settings are collapsed by default. Tapping the exercise information
+card toggles them without changing the configured values.
+
+The **First note only** option shows its enabled or disabled state beneath the
+label. When enabled, it keeps the full count-in audible, then plays the
+metronome only on the first beat of each exercise measure.
+
+During the exercise, every beat produces a brief green outline ring as it
+crosses the judgement line, including beats muted by downbeat-only mode. The
+ring follows that beat to the left and lasts for one quarter of the current
+beat duration, so it scales with tempo.
+
+The judgement line is centered on the rhythm lane and is ten times the diameter
+of the largest note circle rather than spanning the full player height.
+
+While an exercise is idle, the timeline centers the notes from its first
+measure as a static musical preview while preserving their relative tick
+spacing. The judgement line is hidden in preview mode.
+
+Starting an inspection opens a dedicated full-screen player containing the
+timeline, current status, and playback controls. Player text adapts to the
+active theme, using white in dark themes and black in light themes. Initial
+playback waits two seconds after opening the player before starting the count-in
+or exercise, giving the device time to prepare the screen and audio path. Pause
+freezes both metronome audio and monotonic timeline progress. When count-in is
+enabled, Resume plays the configured count-in while the timeline remains
+frozen at the paused position, then continues from there. During an initial or
+Repeat count-in, the playback timeline waits at one quarter note before
+exercise time zero. It begins scrolling during the final quarter note of the
+count-in, reaches time zero with the exercise audio, and continues without a
+visual jump. Once exercise playback begins, the Player shows the current
+one-based measure and total measure count beneath the status. It preserves that
+progress while paused or during Resume count-in and shows the final measure on
+completion. Stop returns to the exercise settings.
+
+When microphone detection and hit matching are added, timing feedback will use
+a green ring for on-time hits, a blue ring for early hits, and a red ring for
+late hits. Missed notes will show a gray `X` at the expected-note position, and
+extra hits will show a red `X` at the detected-hit position. Extra hits remain
+a distinct result category for accurate session statistics.
 
 ## Continuous integration
 
