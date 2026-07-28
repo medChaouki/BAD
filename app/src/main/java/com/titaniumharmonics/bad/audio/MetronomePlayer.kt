@@ -8,5 +8,11 @@ interface MetronomePlayer {
         downbeatsOnly: Boolean,
     ): Long
 
+    fun pause()
+
+    fun startResumeCountIn(exercise: Exercise): Long
+
+    fun resume()
+
     fun stop()
 }

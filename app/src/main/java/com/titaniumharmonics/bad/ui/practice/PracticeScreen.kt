@@ -1,7 +1,9 @@
 package com.titaniumharmonics.bad.ui.practice
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -76,6 +80,9 @@ fun PracticeRoute(
         onUnload = viewModel::unloadExercise,
         onStart = viewModel::startPlayback,
         onStop = viewModel::stopPlayback,
+        onPause = viewModel::pausePlayback,
+        onResume = viewModel::resumePlayback,
+        onRepeat = viewModel::restartPlayback,
         onDecreaseTempo = viewModel::decreaseTempo,
         onIncreaseTempo = viewModel::increaseTempo,
         onCountInEnabledChange = viewModel::setCountInEnabled,
@@ -93,6 +100,9 @@ fun PracticeScreen(
     onUnload: () -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onRepeat: () -> Unit,
     onDecreaseTempo: () -> Unit,
     onIncreaseTempo: () -> Unit,
     onCountInEnabledChange: (Boolean) -> Unit,
@@ -100,6 +110,19 @@ fun PracticeScreen(
     onDecreaseMeasureCount: () -> Unit,
     onIncreaseMeasureCount: () -> Unit,
 ) {
+    val playbackExercise = uiState.playbackExercise
+    if (playbackExercise != null && uiState.phase.isPlayerVisible()) {
+        FullScreenPracticePlayer(
+            exercise = playbackExercise,
+            uiState = uiState,
+            onPause = onPause,
+            onResume = onResume,
+            onRepeat = onRepeat,
+            onStop = onStop,
+        )
+        return
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -131,7 +154,7 @@ fun PracticeScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            val exercise = uiState.playbackExercise
+            val exercise = playbackExercise
             if (exercise == null) {
                 EmptyExerciseCard(
                     uiState = uiState,
@@ -146,6 +169,8 @@ fun PracticeScreen(
                             PracticePhase.PREPARING,
                             PracticePhase.COUNTING_IN,
                             PracticePhase.RUNNING,
+                            PracticePhase.PAUSED,
+                            PracticePhase.RESUME_COUNT_IN,
                         ),
                         onDecreaseTempo = onDecreaseTempo,
                         onIncreaseTempo = onIncreaseTempo,
@@ -169,6 +194,81 @@ fun PracticeScreen(
                     onStop = onStop,
                     onUnload = onUnload,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FullScreenPracticePlayer(
+    exercise: Exercise,
+    uiState: PracticeUiState,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onRepeat: () -> Unit,
+    onStop: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        ExerciseTimeline(
+            exercise = exercise,
+            exerciseElapsedNanos = uiState.exerciseElapsedNanos,
+            modifier = Modifier.fillMaxSize(),
+            fullScreen = true,
+        )
+        Text(
+            text = sessionStatusText(uiState),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 24.dp),
+        )
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Button(
+                onClick = if (uiState.phase == PracticePhase.PAUSED) {
+                    onResume
+                } else {
+                    onPause
+                },
+                enabled = uiState.phase in setOf(
+                    PracticePhase.COUNTING_IN,
+                    PracticePhase.RUNNING,
+                    PracticePhase.PAUSED,
+                ),
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    when (uiState.phase) {
+                        PracticePhase.PAUSED -> "Resume"
+                        PracticePhase.RESUME_COUNT_IN -> "Count-in"
+                        else -> "Pause"
+                    },
+                )
+            }
+            OutlinedButton(
+                onClick = onRepeat,
+                enabled = uiState.phase != PracticePhase.PREPARING,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Repeat")
+            }
+            OutlinedButton(
+                onClick = onStop,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Stop")
             }
         }
     }
@@ -417,6 +517,7 @@ private fun ExerciseTimeline(
     exercise: Exercise,
     exerciseElapsedNanos: Long,
     modifier: Modifier = Modifier,
+    fullScreen: Boolean = false,
 ) {
     val timing = remember(exercise) { ExerciseTiming(exercise) }
     val density = LocalDensity.current
@@ -431,6 +532,7 @@ private fun ExerciseTimeline(
 
     Card(
         modifier = modifier,
+        shape = if (fullScreen) RoundedCornerShape(0.dp) else MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
     ) {
         Canvas(
@@ -524,20 +626,9 @@ private fun timelineX(
 
 @Composable
 private fun SessionStatus(uiState: PracticeUiState) {
-    val statusText = when (uiState.phase) {
-        PracticePhase.READY -> "Ready for inspection."
-        PracticePhase.PREPARING -> "Calibrating confidence…"
-        PracticePhase.COUNTING_IN -> "Count-in: ${uiState.countInBeatsRemaining}"
-        PracticePhase.RUNNING -> "Inspection in progress."
-        PracticePhase.COMPLETED -> "Inspection complete."
-        PracticePhase.ERROR -> "Rhythm subsystem objected."
-        PracticePhase.UNLOADED -> "No exercise loaded."
-        PracticePhase.LOADING -> "Loading exercise…"
-    }
-
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            text = statusText,
+            text = sessionStatusText(uiState),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
@@ -562,6 +653,8 @@ private fun SessionControls(
         PracticePhase.PREPARING,
         PracticePhase.COUNTING_IN,
         PracticePhase.RUNNING,
+        PracticePhase.PAUSED,
+        PracticePhase.RESUME_COUNT_IN,
     )
 
     Row(modifier = Modifier.fillMaxWidth()) {
@@ -622,6 +715,9 @@ private fun PracticeScreenPreview() {
             onUnload = {},
             onStart = {},
             onStop = {},
+            onPause = {},
+            onResume = {},
+            onRepeat = {},
             onDecreaseTempo = {},
             onIncreaseTempo = {},
             onCountInEnabledChange = {},
@@ -631,3 +727,25 @@ private fun PracticeScreenPreview() {
         )
     }
 }
+
+private fun sessionStatusText(uiState: PracticeUiState): String = when (uiState.phase) {
+    PracticePhase.READY -> "Ready for inspection."
+    PracticePhase.PREPARING -> "Calibrating confidence…"
+    PracticePhase.COUNTING_IN -> "Count-in: ${uiState.countInBeatsRemaining}"
+    PracticePhase.RUNNING -> "Inspection in progress."
+    PracticePhase.PAUSED -> "Inspection paused."
+    PracticePhase.RESUME_COUNT_IN -> "Count-in: ${uiState.countInBeatsRemaining}"
+    PracticePhase.COMPLETED -> "Inspection complete."
+    PracticePhase.ERROR -> "Rhythm subsystem objected."
+    PracticePhase.UNLOADED -> "No exercise loaded."
+    PracticePhase.LOADING -> "Loading exercise…"
+}
+
+private fun PracticePhase.isPlayerVisible(): Boolean = this in setOf(
+    PracticePhase.PREPARING,
+    PracticePhase.COUNTING_IN,
+    PracticePhase.RUNNING,
+    PracticePhase.PAUSED,
+    PracticePhase.RESUME_COUNT_IN,
+    PracticePhase.COMPLETED,
+)

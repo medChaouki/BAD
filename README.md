@@ -23,6 +23,7 @@ timeline. Microphone capture and hit detection are not implemented yet.
 - Streaming `AudioTrack` output
 - Single-lane scrolling rhythm timeline
 - BPM-scaled beat highlights at the judgement line
+- Full-screen practice playback with pause, resume, repeat, and stop controls
 - Per-exercise playback controls for tempo, count-in, measure count, and
   downbeat-only clicks
 - Lifecycle-aware playback cleanup
@@ -128,6 +129,13 @@ During the exercise, every beat produces a brief green outline ring as it
 crosses the judgement line, including beats muted by downbeat-only mode. The
 ring follows that beat to the left and lasts for one quarter of the current
 beat duration, so it scales with tempo.
+
+Starting an inspection opens a dedicated full-screen player containing the
+timeline, current status, and playback controls. Pause freezes both metronome
+audio and monotonic timeline progress. When count-in is enabled, Resume plays
+the configured count-in while the timeline remains frozen, then continues from
+the paused position. Repeat restarts with the configured count-in, and Stop
+returns to the exercise settings.
 
 When microphone detection and hit matching are added, timing feedback will use
 a green ring for on-time hits, a blue ring for early hits, and a red ring for

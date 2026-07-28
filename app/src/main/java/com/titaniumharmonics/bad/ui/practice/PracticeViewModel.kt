@@ -12,11 +12,13 @@ import com.titaniumharmonics.bad.timing.AndroidMonotonicClock
 import com.titaniumharmonics.bad.timing.ExerciseTiming
 import com.titaniumharmonics.bad.timing.MonotonicClock
 import com.titaniumharmonics.bad.timing.PlaybackPhase
+import com.titaniumharmonics.bad.timing.SessionElapsedClock
 import com.titaniumharmonics.bad.timing.SessionProgressCalculator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,12 +34,16 @@ class PracticeViewModel(
     private val clock: MonotonicClock = AndroidMonotonicClock
     private val exerciseLoader = AssetExerciseLoader(application.assets)
     private val metronomePlayer: MetronomePlayer = AudioTrackMetronome(clock)
+    private val sessionElapsedClock = SessionElapsedClock(clock)
 
     private val mutableUiState = MutableStateFlow(PracticeUiState())
     val uiState: StateFlow<PracticeUiState> = mutableUiState.asStateFlow()
 
     private var loadJob: Job? = null
     private var playbackJob: Job? = null
+    private var audioControlJob: Job? = null
+    private var restartJob: Job? = null
+    private var phaseBeforePause: PracticePhase = PracticePhase.RUNNING
 
     fun loadExercise() {
         if (loadJob?.isActive == true) return
@@ -75,10 +81,24 @@ class PracticeViewModel(
     }
 
     fun startPlayback() {
+        if (restartJob?.isActive == true || playbackJob?.isActive == true) return
+        val previousPlaybackJob = playbackJob
+        if (previousPlaybackJob != null && !previousPlaybackJob.isCompleted) {
+            restartJob = viewModelScope.launch {
+                previousPlaybackJob.join()
+                if (mutableUiState.value.phase == PracticePhase.READY) {
+                    beginPlayback()
+                }
+            }
+            return
+        }
+        beginPlayback()
+    }
+
+    private fun beginPlayback() {
         val state = mutableUiState.value
         val exercise = state.playbackExercise ?: return
         val downbeatsOnly = state.playbackSettings?.downbeatsOnly == true
-        if (playbackJob?.isActive == true) return
 
         val timing = ExerciseTiming(exercise)
         val progressCalculator = SessionProgressCalculator(timing)
@@ -98,10 +118,15 @@ class PracticeViewModel(
                         downbeatsOnly = downbeatsOnly,
                     )
                 }
+                sessionElapsedClock.start(playbackStartedNanos)
 
                 while (isActive) {
+                    if (sessionElapsedClock.isPaused) {
+                        delay(UI_UPDATE_INTERVAL_MILLIS)
+                        continue
+                    }
                     val sessionElapsedNanos =
-                        (clock.nowNanos() - playbackStartedNanos).coerceAtLeast(0L)
+                        sessionElapsedClock.elapsedNanos() ?: break
                     val progress = progressCalculator.calculate(sessionElapsedNanos)
                     mutableUiState.value = mutableUiState.value.copy(
                         phase = progress.phase.toUiPhase(),
@@ -130,19 +155,138 @@ class PracticeViewModel(
         }
     }
 
-    fun stopPlayback() {
-        val playbackWasActive = mutableUiState.value.phase in setOf(
-            PracticePhase.PREPARING,
-            PracticePhase.COUNTING_IN,
-            PracticePhase.RUNNING,
-        )
-        playbackJob?.cancel()
-        playbackJob = null
+    fun pausePlayback() {
+        val state = mutableUiState.value
+        if (state.phase !in setOf(PracticePhase.COUNTING_IN, PracticePhase.RUNNING)) return
+        if (audioControlJob?.isActive == true) return
 
-        if (!playbackWasActive) return
-        val exercise = mutableUiState.value.playbackExercise ?: return
+        val exercise = state.playbackExercise ?: return
+        val timing = ExerciseTiming(exercise)
+        val sessionElapsedNanos = sessionElapsedClock.pause() ?: return
+        val progress = SessionProgressCalculator(timing).calculate(sessionElapsedNanos)
+        phaseBeforePause = progress.phase.toUiPhase()
+        mutableUiState.value = state.copy(
+            phase = PracticePhase.PAUSED,
+            exerciseElapsedNanos = progress.exerciseElapsedNanos,
+            countInBeatsRemaining = countInBeatsRemaining(
+                exerciseElapsedNanos = progress.exerciseElapsedNanos,
+                beatDurationNanos = timing.beatDurationNanos,
+            ),
+        )
+
+        audioControlJob = viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    metronomePlayer.pause()
+                }
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                sessionElapsedClock.resume()
+                playbackJob?.cancel()
+                mutableUiState.value = mutableUiState.value.copy(
+                    phase = PracticePhase.ERROR,
+                    errorMessage = exception.message ?: "Unable to pause metronome playback.",
+                )
+            }
+        }
+    }
+
+    fun resumePlayback() {
+        val state = mutableUiState.value
+        if (state.phase != PracticePhase.PAUSED) return
+        if (audioControlJob?.isActive == true) return
+        val exercise = state.playbackExercise ?: return
+
+        audioControlJob = viewModelScope.launch {
+            try {
+                if (exercise.countInMeasures > 0) {
+                    runResumeCountIn(exercise)
+                } else {
+                    resumePausedPlayback()
+                }
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                playbackJob?.cancel()
+                mutableUiState.value = mutableUiState.value.copy(
+                    phase = PracticePhase.ERROR,
+                    errorMessage = exception.message ?: "Unable to resume metronome playback.",
+                )
+            }
+        }
+    }
+
+    private suspend fun runResumeCountIn(exercise: Exercise) {
         val timing = ExerciseTiming(exercise)
         mutableUiState.value = mutableUiState.value.copy(
+            phase = PracticePhase.RESUME_COUNT_IN,
+            countInBeatsRemaining = exercise.countInMeasures *
+                exercise.timeSignature.numerator,
+            errorMessage = null,
+        )
+        val countInStartedNanos = withContext(Dispatchers.IO) {
+            metronomePlayer.startResumeCountIn(exercise)
+        }
+
+        while (true) {
+            val countInElapsedNanos =
+                (clock.nowNanos() - countInStartedNanos).coerceAtLeast(0L)
+            val countInRemainingNanos =
+                (timing.countInDurationNanos - countInElapsedNanos).coerceAtLeast(0L)
+            mutableUiState.value = mutableUiState.value.copy(
+                countInBeatsRemaining = ceil(
+                    countInRemainingNanos.toDouble() / timing.beatDurationNanos,
+                ).toInt(),
+            )
+            if (countInElapsedNanos >= timing.countInDurationNanos) break
+            delay(UI_UPDATE_INTERVAL_MILLIS)
+        }
+
+        resumePausedPlayback()
+    }
+
+    private suspend fun resumePausedPlayback() {
+        withContext(Dispatchers.IO) {
+            metronomePlayer.resume()
+        }
+        sessionElapsedClock.resume()
+        mutableUiState.value = mutableUiState.value.copy(
+            phase = phaseBeforePause,
+            countInBeatsRemaining = 0,
+            errorMessage = null,
+        )
+    }
+
+    fun restartPlayback() {
+        if (restartJob?.isActive == true) return
+        if (!mutableUiState.value.phase.isPlayerVisible()) return
+
+        restartJob = viewModelScope.launch {
+            audioControlJob?.cancelAndJoin()
+            audioControlJob = null
+            val previousPlaybackJob = playbackJob
+            playbackJob = null
+            previousPlaybackJob?.cancelAndJoin()
+            sessionElapsedClock.reset()
+            beginPlayback()
+        }
+    }
+
+    fun stopPlayback() {
+        val state = mutableUiState.value
+        val playerWasVisible = state.phase.isPlayerVisible()
+        restartJob?.cancel()
+        restartJob = null
+        audioControlJob?.cancel()
+        audioControlJob = null
+        playbackJob?.cancel()
+        sessionElapsedClock.reset()
+
+        if (!playerWasVisible) return
+        val exercise = state.playbackExercise ?: return
+        val timing = ExerciseTiming(exercise)
+        mutableUiState.value = state.copy(
             phase = PracticePhase.READY,
             exerciseElapsedNanos = -timing.countInDurationNanos,
             countInBeatsRemaining = 0,
@@ -200,6 +344,8 @@ class PracticeViewModel(
 
     override fun onCleared() {
         loadJob?.cancel()
+        restartJob?.cancel()
+        audioControlJob?.cancel()
         playbackJob?.cancel()
         metronomePlayer.stop()
         super.onCleared()
@@ -242,6 +388,17 @@ class PracticeViewModel(
         PracticePhase.PREPARING,
         PracticePhase.COUNTING_IN,
         PracticePhase.RUNNING,
+        PracticePhase.PAUSED,
+        PracticePhase.RESUME_COUNT_IN,
+    )
+
+    private fun PracticePhase.isPlayerVisible(): Boolean = this in setOf(
+        PracticePhase.PREPARING,
+        PracticePhase.COUNTING_IN,
+        PracticePhase.RUNNING,
+        PracticePhase.PAUSED,
+        PracticePhase.RESUME_COUNT_IN,
+        PracticePhase.COMPLETED,
     )
 
     private companion object {

@@ -10,6 +10,8 @@ enum class PracticePhase {
     PREPARING,
     COUNTING_IN,
     RUNNING,
+    PAUSED,
+    RESUME_COUNT_IN,
     COMPLETED,
     ERROR,
 }
