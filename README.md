@@ -25,6 +25,7 @@ timeline. Microphone capture and hit detection are not implemented yet.
 - Static first-measure preview while an exercise is idle
 - BPM-scaled beat highlights at the judgement line
 - Full-screen practice playback with pause, resume, repeat, and stop controls
+- Branded adaptive launcher icon and orientation-aware startup screen
 - Collapsible per-exercise playback controls for tempo, count-in, measure
   count, and downbeat-only clicks
 - Lifecycle-aware playback cleanup
@@ -163,6 +164,14 @@ a green ring for on-time hits, a blue ring for early hits, and a red ring for
 late hits. Missed notes will show a gray `X` at the expected-note position, and
 extra hits will show a red `X` at the detected-hit position. Extra hits remain
 a distinct result category for accurate session statistics.
+
+## Branding
+
+The launcher uses the B.A.D. logo as an adaptive icon on a black background.
+Android's mandatory system splash uses a transparent icon on black so it blends
+into the one-second, edge-to-edge branded startup screen. Portrait and
+landscape artwork are selected automatically and cropped proportionally
+without stretching.
 
 ## Continuous integration
 

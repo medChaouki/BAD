@@ -2,4 +2,9 @@
 <resources>
 
     <style name="Theme.BAD" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.BAD.Starting" parent="Theme.BAD">
+        <item name="android:windowBackground">@drawable/bad_splash</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
 </resources>
