@@ -7,6 +7,7 @@ import com.titaniumharmonics.bad.audio.AudioTrackMetronome
 import com.titaniumharmonics.bad.audio.MetronomePlayer
 import com.titaniumharmonics.bad.exercise.AssetExerciseLoader
 import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.timing.AndroidMonotonicClock
 import com.titaniumharmonics.bad.timing.ExerciseTiming
 import com.titaniumharmonics.bad.timing.MonotonicClock
@@ -51,6 +52,7 @@ class PracticeViewModel(
                 val timing = ExerciseTiming(exercise)
                 mutableUiState.value = PracticeUiState(
                     exercise = exercise,
+                    playbackSettings = ExercisePlaybackSettings.fromExercise(exercise),
                     phase = PracticePhase.READY,
                     exerciseElapsedNanos = -timing.countInDurationNanos,
                 )
@@ -73,7 +75,7 @@ class PracticeViewModel(
     }
 
     fun startPlayback() {
-        val exercise = mutableUiState.value.exercise ?: return
+        val exercise = mutableUiState.value.playbackExercise ?: return
         if (playbackJob?.isActive == true) return
 
         val timing = ExerciseTiming(exercise)
@@ -133,7 +135,7 @@ class PracticeViewModel(
         playbackJob = null
 
         if (!playbackWasActive) return
-        val exercise = mutableUiState.value.exercise ?: return
+        val exercise = mutableUiState.value.playbackExercise ?: return
         val timing = ExerciseTiming(exercise)
         mutableUiState.value = mutableUiState.value.copy(
             phase = PracticePhase.READY,
@@ -141,6 +143,48 @@ class PracticeViewModel(
             countInBeatsRemaining = 0,
             errorMessage = null,
         )
+    }
+
+    fun decreaseTempo() {
+        updatePlaybackSettings { settings ->
+            settings.copy(
+                tempoBpm = (settings.tempoBpm - ExercisePlaybackSettings.TEMPO_STEP_BPM)
+                    .coerceAtLeast(ExercisePlaybackSettings.MIN_TEMPO_BPM),
+            )
+        }
+    }
+
+    fun increaseTempo() {
+        updatePlaybackSettings { settings ->
+            settings.copy(
+                tempoBpm = (settings.tempoBpm + ExercisePlaybackSettings.TEMPO_STEP_BPM)
+                    .coerceAtMost(ExercisePlaybackSettings.MAX_TEMPO_BPM),
+            )
+        }
+    }
+
+    fun setCountInEnabled(enabled: Boolean) {
+        updatePlaybackSettings { settings ->
+            settings.copy(countInEnabled = enabled)
+        }
+    }
+
+    fun decreaseMeasureCount() {
+        updatePlaybackSettings { settings ->
+            settings.copy(
+                measureCount = (settings.measureCount - 1)
+                    .coerceAtLeast(ExercisePlaybackSettings.MIN_MEASURE_COUNT),
+            )
+        }
+    }
+
+    fun increaseMeasureCount() {
+        updatePlaybackSettings { settings ->
+            settings.copy(
+                measureCount = (settings.measureCount + 1)
+                    .coerceAtMost(ExercisePlaybackSettings.MAX_MEASURE_COUNT),
+            )
+        }
     }
 
     override fun onCleared() {
@@ -165,6 +209,29 @@ class PracticeViewModel(
             .toInt()
             .coerceAtLeast(1)
     }
+
+    private fun updatePlaybackSettings(
+        transform: (ExercisePlaybackSettings) -> ExercisePlaybackSettings,
+    ) {
+        val state = mutableUiState.value
+        if (state.phase.isPlaybackActive()) return
+        val settings = state.playbackSettings ?: return
+        val updatedSettings = transform(settings)
+        val exercise = state.exercise ?: return
+        val timing = ExerciseTiming(updatedSettings.applyTo(exercise))
+        mutableUiState.value = state.copy(
+            playbackSettings = updatedSettings,
+            exerciseElapsedNanos = -timing.countInDurationNanos,
+            countInBeatsRemaining = 0,
+            errorMessage = null,
+        )
+    }
+
+    private fun PracticePhase.isPlaybackActive(): Boolean = this in setOf(
+        PracticePhase.PREPARING,
+        PracticePhase.COUNTING_IN,
+        PracticePhase.RUNNING,
+    )
 
     private companion object {
         const val DEFAULT_EXERCISE_ASSET = "basic-quarter-notes.json"

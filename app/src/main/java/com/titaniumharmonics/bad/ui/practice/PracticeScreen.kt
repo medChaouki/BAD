@@ -21,12 +21,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
@@ -40,6 +42,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.titaniumharmonics.bad.exercise.Exercise
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
+import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.ExpectedNote
 import com.titaniumharmonics.bad.exercise.TimeSignature
 import com.titaniumharmonics.bad.timing.ExerciseTiming
@@ -71,6 +74,11 @@ fun PracticeRoute(
         onUnload = viewModel::unloadExercise,
         onStart = viewModel::startPlayback,
         onStop = viewModel::stopPlayback,
+        onDecreaseTempo = viewModel::decreaseTempo,
+        onIncreaseTempo = viewModel::increaseTempo,
+        onCountInEnabledChange = viewModel::setCountInEnabled,
+        onDecreaseMeasureCount = viewModel::decreaseMeasureCount,
+        onIncreaseMeasureCount = viewModel::increaseMeasureCount,
     )
 }
 
@@ -82,6 +90,11 @@ fun PracticeScreen(
     onUnload: () -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onDecreaseTempo: () -> Unit,
+    onIncreaseTempo: () -> Unit,
+    onCountInEnabledChange: (Boolean) -> Unit,
+    onDecreaseMeasureCount: () -> Unit,
+    onIncreaseMeasureCount: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -114,7 +127,7 @@ fun PracticeScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            val exercise = uiState.exercise
+            val exercise = uiState.playbackExercise
             if (exercise == null) {
                 EmptyExerciseCard(
                     uiState = uiState,
@@ -122,6 +135,21 @@ fun PracticeScreen(
                 )
             } else {
                 ExerciseCard(exercise)
+                uiState.playbackSettings?.let { playbackSettings ->
+                    PlaybackSettingsCard(
+                        settings = playbackSettings,
+                        enabled = uiState.phase !in setOf(
+                            PracticePhase.PREPARING,
+                            PracticePhase.COUNTING_IN,
+                            PracticePhase.RUNNING,
+                        ),
+                        onDecreaseTempo = onDecreaseTempo,
+                        onIncreaseTempo = onIncreaseTempo,
+                        onCountInEnabledChange = onCountInEnabledChange,
+                        onDecreaseMeasureCount = onDecreaseMeasureCount,
+                        onIncreaseMeasureCount = onIncreaseMeasureCount,
+                    )
+                }
                 ExerciseTimeline(
                     exercise = exercise,
                     exerciseElapsedNanos = uiState.exerciseElapsedNanos,
@@ -137,6 +165,119 @@ fun PracticeScreen(
                     onUnload = onUnload,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackSettingsCard(
+    settings: ExercisePlaybackSettings,
+    enabled: Boolean,
+    onDecreaseTempo: () -> Unit,
+    onIncreaseTempo: () -> Unit,
+    onCountInEnabledChange: (Boolean) -> Unit,
+    onDecreaseMeasureCount: () -> Unit,
+    onIncreaseMeasureCount: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = "Playback settings",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            StepperSetting(
+                label = "Tempo",
+                value = "${settings.tempoBpm} BPM",
+                decreaseEnabled = enabled &&
+                    settings.tempoBpm > ExercisePlaybackSettings.MIN_TEMPO_BPM,
+                increaseEnabled = enabled &&
+                    settings.tempoBpm < ExercisePlaybackSettings.MAX_TEMPO_BPM,
+                onDecrease = onDecreaseTempo,
+                onIncrease = onIncreaseTempo,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Count-in",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = if (settings.countInEnabled) "Enabled" else "Disabled",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = settings.countInEnabled,
+                    onCheckedChange = onCountInEnabledChange,
+                    enabled = enabled,
+                )
+            }
+            StepperSetting(
+                label = "Measures",
+                value = settings.measureCount.toString(),
+                decreaseEnabled = enabled &&
+                    settings.measureCount > ExercisePlaybackSettings.MIN_MEASURE_COUNT,
+                increaseEnabled = enabled &&
+                    settings.measureCount < ExercisePlaybackSettings.MAX_MEASURE_COUNT,
+                onDecrease = onDecreaseMeasureCount,
+                onIncrease = onIncreaseMeasureCount,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StepperSetting(
+    label: String,
+    value: String,
+    decreaseEnabled: Boolean,
+    increaseEnabled: Boolean,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(
+            onClick = onDecrease,
+            enabled = decreaseEnabled,
+        ) {
+            Text("−")
+        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .width(88.dp)
+                .padding(horizontal = 8.dp),
+        )
+        OutlinedButton(
+            onClick = onIncrease,
+            enabled = increaseEnabled,
+        ) {
+            Text("+")
         }
     }
 }
@@ -425,6 +566,7 @@ private fun PracticeScreenPreview() {
         PracticeScreen(
             uiState = PracticeUiState(
                 exercise = previewExercise,
+                playbackSettings = ExercisePlaybackSettings.fromExercise(previewExercise),
                 phase = PracticePhase.READY,
                 exerciseElapsedNanos = -2_400_000_000L,
             ),
@@ -432,6 +574,11 @@ private fun PracticeScreenPreview() {
             onUnload = {},
             onStart = {},
             onStop = {},
+            onDecreaseTempo = {},
+            onIncreaseTempo = {},
+            onCountInEnabledChange = {},
+            onDecreaseMeasureCount = {},
+            onIncreaseMeasureCount = {},
         )
     }
 }

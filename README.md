@@ -22,6 +22,7 @@ timeline. Microphone capture and hit detection are not implemented yet.
 - Accented first beat of each measure
 - Streaming `AudioTrack` output
 - Single-lane scrolling rhythm timeline
+- Per-exercise playback controls for tempo, count-in, and measure count
 - Lifecycle-aware playback cleanup
 - JVM tests for exercise parsing, validation, timing, and click generation
 - GitHub Actions verification with downloadable debug APKs
@@ -111,6 +112,12 @@ that clock; Compose animation is not the authoritative timing source.
 Metronome clicks are sample-aligned relative to one another. Physical output
 latency still depends on the Android device and audio route. Output-latency
 calibration has not been implemented yet.
+
+Playback settings can be adjusted while an exercise is idle. They remain in
+effect for repeated runs of that exercise and reset when another exercise is
+loaded. Longer sessions repeat the exercise pattern; shorter sessions truncate
+it at the selected measure boundary. Settings are locked while playback is
+preparing, counting in, or running.
 
 ## Continuous integration
 
