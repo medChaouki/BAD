@@ -131,11 +131,13 @@ ring follows that beat to the left and lasts for one quarter of the current
 beat duration, so it scales with tempo.
 
 Starting an inspection opens a dedicated full-screen player containing the
-timeline, current status, and playback controls. Pause freezes both metronome
-audio and monotonic timeline progress. When count-in is enabled, Resume plays
-the configured count-in while the timeline remains frozen, then continues from
-the paused position. Repeat restarts with the configured count-in, and Stop
-returns to the exercise settings.
+timeline, current status, and playback controls. Initial playback waits two
+seconds after opening the player before starting the count-in or exercise,
+giving the device time to prepare the screen and audio path. Pause freezes both
+metronome audio and monotonic timeline progress. When count-in is enabled,
+Resume plays the configured count-in while the timeline remains frozen, then
+continues from the paused position. Repeat restarts with the configured
+count-in, and Stop returns to the exercise settings.
 
 When microphone detection and hit matching are added, timing feedback will use
 a green ring for on-time hits, a blue ring for early hits, and a red ring for

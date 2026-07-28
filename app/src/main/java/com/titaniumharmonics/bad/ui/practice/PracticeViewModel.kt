@@ -87,15 +87,15 @@ class PracticeViewModel(
             restartJob = viewModelScope.launch {
                 previousPlaybackJob.join()
                 if (mutableUiState.value.phase == PracticePhase.READY) {
-                    beginPlayback()
+                    beginPlayback(startupDelayMillis = RUN_STARTUP_DELAY_MILLIS)
                 }
             }
             return
         }
-        beginPlayback()
+        beginPlayback(startupDelayMillis = RUN_STARTUP_DELAY_MILLIS)
     }
 
-    private fun beginPlayback() {
+    private fun beginPlayback(startupDelayMillis: Long) {
         val state = mutableUiState.value
         val exercise = state.playbackExercise ?: return
         val downbeatsOnly = state.playbackSettings?.downbeatsOnly == true
@@ -112,6 +112,9 @@ class PracticeViewModel(
 
         playbackJob = viewModelScope.launch {
             try {
+                if (startupDelayMillis > 0L) {
+                    delay(startupDelayMillis)
+                }
                 val playbackStartedNanos = withContext(Dispatchers.IO) {
                     metronomePlayer.start(
                         exercise = exercise,
@@ -269,7 +272,7 @@ class PracticeViewModel(
             playbackJob = null
             previousPlaybackJob?.cancelAndJoin()
             sessionElapsedClock.reset()
-            beginPlayback()
+            beginPlayback(startupDelayMillis = 0L)
         }
     }
 
@@ -403,6 +406,7 @@ class PracticeViewModel(
 
     private companion object {
         const val DEFAULT_EXERCISE_ASSET = "basic-quarter-notes.json"
+        const val RUN_STARTUP_DELAY_MILLIS = 2_000L
         const val UI_UPDATE_INTERVAL_MILLIS = 16L
     }
 }
