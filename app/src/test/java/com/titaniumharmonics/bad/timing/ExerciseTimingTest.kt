@@ -33,9 +33,26 @@ class ExerciseTimingTest {
         val timing = ExerciseTiming(exercise)
 
         assertEquals(600_000_000L, timing.beatDurationNanos)
+        assertEquals(150_000_000L, timing.beatHighlightDurationNanos)
         assertEquals(2_400_000_000L, timing.countInDurationNanos)
         assertEquals(2_400_000_000L, timing.exerciseDurationNanos)
         assertEquals(4_800_000_000L, timing.totalDurationNanos)
+    }
+
+    @Test
+    fun beatHighlight_returnsCurrentBeatTimeForFirstQuarterOfEveryBeat() {
+        val timing = ExerciseTiming(exercise)
+
+        assertEquals(null, timing.highlightedBeatTimeNanos(-1L))
+        assertEquals(0L, timing.highlightedBeatTimeNanos(0L))
+        assertEquals(0L, timing.highlightedBeatTimeNanos(149_999_999L))
+        assertEquals(null, timing.highlightedBeatTimeNanos(150_000_000L))
+        assertEquals(null, timing.highlightedBeatTimeNanos(599_999_999L))
+        assertEquals(600_000_000L, timing.highlightedBeatTimeNanos(600_000_000L))
+        assertEquals(
+            null,
+            timing.highlightedBeatTimeNanos(timing.exerciseDurationNanos),
+        )
     }
 
     @Test

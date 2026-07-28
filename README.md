@@ -22,7 +22,9 @@ timeline. Microphone capture and hit detection are not implemented yet.
 - Accented first beat of each measure
 - Streaming `AudioTrack` output
 - Single-lane scrolling rhythm timeline
-- Per-exercise playback controls for tempo, count-in, and measure count
+- BPM-scaled beat highlights at the judgement line
+- Per-exercise playback controls for tempo, count-in, measure count, and
+  downbeat-only clicks
 - Lifecycle-aware playback cleanup
 - JVM tests for exercise parsing, validation, timing, and click generation
 - GitHub Actions verification with downloadable debug APKs
@@ -118,6 +120,20 @@ effect for repeated runs of that exercise and reset when another exercise is
 loaded. Longer sessions repeat the exercise pattern; shorter sessions truncate
 it at the selected measure boundary. Settings are locked while playback is
 preparing, counting in, or running.
+
+The downbeat-only option keeps the full count-in audible, then plays the
+metronome only on the first beat of each exercise measure.
+
+During the exercise, every beat produces a brief green outline ring as it
+crosses the judgement line, including beats muted by downbeat-only mode. The
+ring follows that beat to the left and lasts for one quarter of the current
+beat duration, so it scales with tempo.
+
+When microphone detection and hit matching are added, timing feedback will use
+a green ring for on-time hits, a blue ring for early hits, and a red ring for
+late hits. Missed notes will show a gray `X` at the expected-note position, and
+extra hits will show a red `X` at the detected-hit position. Extra hits remain
+a distinct result category for accurate session statistics.
 
 ## Continuous integration
 

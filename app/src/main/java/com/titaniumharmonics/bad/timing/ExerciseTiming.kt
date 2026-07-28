@@ -18,6 +18,9 @@ class ExerciseTiming(
     val beatDurationNanos: Long =
         durationToNanos(quarterNotes = 4.0 / exercise.timeSignature.denominator)
 
+    val beatHighlightDurationNanos: Long =
+        (beatDurationNanos / BEAT_HIGHLIGHT_DURATION_DIVISOR).coerceAtLeast(1L)
+
     val countInDurationNanos: Long =
         durationToNanos(
             quarterNotes = exercise.countInMeasures.toDouble() *
@@ -57,6 +60,22 @@ class ExerciseTiming(
         )
     }
 
+    fun highlightedBeatTimeNanos(exerciseElapsedNanos: Long): Long? {
+        if (exerciseElapsedNanos !in 0 until exerciseDurationNanos) return null
+
+        var beatIndex = exerciseElapsedNanos / beatDurationNanos
+        var beatTimeNanos = beatTimeNanos(beatIndex)
+        if (beatTimeNanos > exerciseElapsedNanos && beatIndex > 0L) {
+            beatIndex -= 1
+            beatTimeNanos = beatTimeNanos(beatIndex)
+        }
+
+        val elapsedSinceBeatNanos = exerciseElapsedNanos - beatTimeNanos
+        return beatTimeNanos.takeIf {
+            elapsedSinceBeatNanos in 0 until beatHighlightDurationNanos
+        }
+    }
+
     private fun durationToNanos(quarterNotes: Double): Long {
         val durationNanos =
             quarterNotes * NANOS_PER_MINUTE / exercise.tempoBpm
@@ -68,5 +87,6 @@ class ExerciseTiming(
 
     private companion object {
         const val NANOS_PER_MINUTE = 60_000_000_000.0
+        const val BEAT_HIGHLIGHT_DURATION_DIVISOR = 4L
     }
 }

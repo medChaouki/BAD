@@ -75,7 +75,9 @@ class PracticeViewModel(
     }
 
     fun startPlayback() {
-        val exercise = mutableUiState.value.playbackExercise ?: return
+        val state = mutableUiState.value
+        val exercise = state.playbackExercise ?: return
+        val downbeatsOnly = state.playbackSettings?.downbeatsOnly == true
         if (playbackJob?.isActive == true) return
 
         val timing = ExerciseTiming(exercise)
@@ -91,7 +93,10 @@ class PracticeViewModel(
         playbackJob = viewModelScope.launch {
             try {
                 val playbackStartedNanos = withContext(Dispatchers.IO) {
-                    metronomePlayer.start(exercise)
+                    metronomePlayer.start(
+                        exercise = exercise,
+                        downbeatsOnly = downbeatsOnly,
+                    )
                 }
 
                 while (isActive) {
@@ -166,6 +171,12 @@ class PracticeViewModel(
     fun setCountInEnabled(enabled: Boolean) {
         updatePlaybackSettings { settings ->
             settings.copy(countInEnabled = enabled)
+        }
+    }
+
+    fun setDownbeatsOnly(enabled: Boolean) {
+        updatePlaybackSettings { settings ->
+            settings.copy(downbeatsOnly = enabled)
         }
     }
 

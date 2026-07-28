@@ -17,6 +17,7 @@ object ClickTrackGenerator {
     fun generate(
         exercise: Exercise,
         sampleRateHz: Int = DEFAULT_SAMPLE_RATE_HZ,
+        downbeatsOnly: Boolean = false,
     ): ShortArray {
         require(sampleRateHz > 0) { "sampleRateHz must be greater than zero." }
 
@@ -37,7 +38,17 @@ object ClickTrackGenerator {
             totalMeasureCount,
             exercise.timeSignature.numerator.toLong(),
         )
+        val countInBeatCount = Math.multiplyExact(
+            exercise.countInMeasures.toLong(),
+            exercise.timeSignature.numerator.toLong(),
+        )
         for (beatIndex in 0 until totalBeatCount) {
+            val isCountInBeat = beatIndex < countInBeatCount
+            val exerciseBeatIndex = beatIndex - countInBeatCount
+            val isExerciseDownbeat =
+                exerciseBeatIndex % exercise.timeSignature.numerator == 0L
+            if (downbeatsOnly && !isCountInBeat && !isExerciseDownbeat) continue
+
             val startSample = (
                 timing.beatTimeNanos(beatIndex).toDouble() *
                     sampleRateHz / NANOS_PER_SECOND

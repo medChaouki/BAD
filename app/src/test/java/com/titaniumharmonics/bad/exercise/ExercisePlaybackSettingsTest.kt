@@ -29,6 +29,7 @@ class ExercisePlaybackSettingsTest {
         assertEquals(100, settings.tempoBpm)
         assertTrue(settings.countInEnabled)
         assertEquals(2, settings.measureCount)
+        assertFalse(settings.downbeatsOnly)
     }
 
     @Test

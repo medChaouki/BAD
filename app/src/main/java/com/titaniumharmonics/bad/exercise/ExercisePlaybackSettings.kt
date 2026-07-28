@@ -4,6 +4,7 @@ data class ExercisePlaybackSettings(
     val tempoBpm: Int,
     val countInEnabled: Boolean,
     val measureCount: Int,
+    val downbeatsOnly: Boolean = false,
 ) {
     init {
         require(tempoBpm in MIN_TEMPO_BPM..MAX_TEMPO_BPM) {
@@ -71,6 +72,7 @@ data class ExercisePlaybackSettings(
                 countInEnabled = exercise.countInMeasures > 0,
                 measureCount = exercise.measureCount
                     .coerceIn(MIN_MEASURE_COUNT, MAX_MEASURE_COUNT),
+                downbeatsOnly = false,
             )
     }
 }

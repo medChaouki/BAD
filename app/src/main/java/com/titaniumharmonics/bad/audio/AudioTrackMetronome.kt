@@ -17,7 +17,10 @@ class AudioTrackMetronome(
 
     @WorkerThread
     @Synchronized
-    override fun start(exercise: Exercise): Long {
+    override fun start(
+        exercise: Exercise,
+        downbeatsOnly: Boolean,
+    ): Long {
         stop()
 
         val sampleRateHz = ClickTrackGenerator.DEFAULT_SAMPLE_RATE_HZ
@@ -34,6 +37,7 @@ class AudioTrackMetronome(
         val samples = ClickTrackGenerator.generate(
             exercise = exercise,
             sampleRateHz = sampleRateHz,
+            downbeatsOnly = downbeatsOnly,
         )
         val track = AudioTrack.Builder()
             .setAudioAttributes(

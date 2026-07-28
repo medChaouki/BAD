@@ -30,7 +30,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -77,6 +79,7 @@ fun PracticeRoute(
         onDecreaseTempo = viewModel::decreaseTempo,
         onIncreaseTempo = viewModel::increaseTempo,
         onCountInEnabledChange = viewModel::setCountInEnabled,
+        onDownbeatsOnlyChange = viewModel::setDownbeatsOnly,
         onDecreaseMeasureCount = viewModel::decreaseMeasureCount,
         onIncreaseMeasureCount = viewModel::increaseMeasureCount,
     )
@@ -93,6 +96,7 @@ fun PracticeScreen(
     onDecreaseTempo: () -> Unit,
     onIncreaseTempo: () -> Unit,
     onCountInEnabledChange: (Boolean) -> Unit,
+    onDownbeatsOnlyChange: (Boolean) -> Unit,
     onDecreaseMeasureCount: () -> Unit,
     onIncreaseMeasureCount: () -> Unit,
 ) {
@@ -146,6 +150,7 @@ fun PracticeScreen(
                         onDecreaseTempo = onDecreaseTempo,
                         onIncreaseTempo = onIncreaseTempo,
                         onCountInEnabledChange = onCountInEnabledChange,
+                        onDownbeatsOnlyChange = onDownbeatsOnlyChange,
                         onDecreaseMeasureCount = onDecreaseMeasureCount,
                         onIncreaseMeasureCount = onIncreaseMeasureCount,
                     )
@@ -176,6 +181,7 @@ private fun PlaybackSettingsCard(
     onDecreaseTempo: () -> Unit,
     onIncreaseTempo: () -> Unit,
     onCountInEnabledChange: (Boolean) -> Unit,
+    onDownbeatsOnlyChange: (Boolean) -> Unit,
     onDecreaseMeasureCount: () -> Unit,
     onIncreaseMeasureCount: () -> Unit,
 ) {
@@ -223,6 +229,32 @@ private fun PlaybackSettingsCard(
                 Switch(
                     checked = settings.countInEnabled,
                     onCheckedChange = onCountInEnabledChange,
+                    enabled = enabled,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "First beat only",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = if (settings.downbeatsOnly) {
+                            "Exercise downbeats"
+                        } else {
+                            "Every exercise beat"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = settings.downbeatsOnly,
+                    onCheckedChange = onDownbeatsOnlyChange,
                     enabled = enabled,
                 )
             }
@@ -394,6 +426,7 @@ private fun ExerciseTimeline(
     val judgementColor = MaterialTheme.colorScheme.error
     val noteColor = MaterialTheme.colorScheme.primary
     val accentColor = MaterialTheme.colorScheme.tertiary
+    val beatHighlightColor = Color(0xFF43A047)
     val backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow
 
     Card(
@@ -458,6 +491,21 @@ private fun ExerciseTimeline(
                 strokeWidth = 6f,
                 cap = StrokeCap.Round,
             )
+
+            timing.highlightedBeatTimeNanos(exerciseElapsedNanos)?.let { beatTimeNanos ->
+                val highlightX = timelineX(
+                    eventTimeNanos = beatTimeNanos,
+                    exerciseElapsedNanos = exerciseElapsedNanos,
+                    judgementX = judgementX,
+                    pixelsPerSecond = pixelsPerSecond,
+                )
+                drawCircle(
+                    color = beatHighlightColor,
+                    radius = 20f,
+                    center = Offset(highlightX, laneY),
+                    style = Stroke(width = 4f),
+                )
+            }
         }
     }
 }
@@ -577,6 +625,7 @@ private fun PracticeScreenPreview() {
             onDecreaseTempo = {},
             onIncreaseTempo = {},
             onCountInEnabledChange = {},
+            onDownbeatsOnlyChange = {},
             onDecreaseMeasureCount = {},
             onIncreaseMeasureCount = {},
         )
