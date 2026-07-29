@@ -16,31 +16,45 @@ class ExerciseStorageInitializer(
 ) {
     @WorkerThread
     fun initialize(): Uri? = runCatching {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            initializeSharedDownloadsFolder() ?: initializePrivateFallback()
+        val preferences = context.getSharedPreferences(
+            STORAGE_PREFERENCES_NAME,
+            Context.MODE_PRIVATE,
+        )
+        val shouldSeedSample = !preferences.getBoolean(SAMPLE_SEEDED_KEY, false)
+        val folderUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            initializeSharedDownloadsFolder(shouldSeedSample) ?:
+                initializePrivateFallback(shouldSeedSample)
         } else {
-            initializePrivateFallback()
+            initializePrivateFallback(shouldSeedSample)
         }
+        if (folderUri != null && shouldSeedSample) {
+            preferences.edit()
+                .putBoolean(SAMPLE_SEEDED_KEY, true)
+                .apply()
+        }
+        folderUri
     }.getOrNull()
 
     @RequiresApi(Build.VERSION_CODES.Q)
-    private fun initializeSharedDownloadsFolder(): Uri? {
+    private fun initializeSharedDownloadsFolder(shouldSeedSample: Boolean): Uri? {
         return runCatching {
             val contentResolver = context.contentResolver
             val downloadsCollection = MediaStore.Downloads.getContentUri(
                 MediaStore.VOLUME_EXTERNAL_PRIMARY,
             )
-            val sampleExists = contentResolver.query(
-                downloadsCollection,
-                arrayOf(MediaStore.Downloads._ID),
-                "${MediaStore.Downloads.DISPLAY_NAME} = ? AND " +
-                    "${MediaStore.Downloads.RELATIVE_PATH} = ?",
-                arrayOf(SAMPLE_FILE_NAME, SHARED_RELATIVE_PATH),
-                null,
-            )?.use { cursor -> cursor.moveToFirst() } == true
+            if (shouldSeedSample) {
+                val sampleExists = contentResolver.query(
+                    downloadsCollection,
+                    arrayOf(MediaStore.Downloads._ID),
+                    "${MediaStore.Downloads.DISPLAY_NAME} = ? AND " +
+                        "${MediaStore.Downloads.RELATIVE_PATH} = ?",
+                    arrayOf(SAMPLE_FILE_NAME, SHARED_RELATIVE_PATH),
+                    null,
+                )?.use { cursor -> cursor.moveToFirst() } == true
 
-            if (!sampleExists) {
-                copySampleToSharedDownloads(downloadsCollection)
+                if (!sampleExists) {
+                    copySampleToSharedDownloads(downloadsCollection)
+                }
             }
 
             DocumentsContract.buildDocumentUri(
@@ -82,7 +96,7 @@ class ExerciseStorageInitializer(
         }
     }
 
-    private fun initializePrivateFallback(): Uri? {
+    private fun initializePrivateFallback(shouldSeedSample: Boolean): Uri? {
         val externalDownloads = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             ?: return null
         val exerciseDirectory = File(externalDownloads, PRIVATE_RELATIVE_PATH)
@@ -91,7 +105,7 @@ class ExerciseStorageInitializer(
         }
 
         val sampleFile = File(exerciseDirectory, SAMPLE_FILE_NAME)
-        if (!sampleFile.exists()) {
+        if (shouldSeedSample && !sampleFile.exists()) {
             context.assets.open("$ASSET_DIRECTORY/$SAMPLE_FILE_NAME").use { inputStream ->
                 sampleFile.outputStream().use { outputStream ->
                     inputStream.copyTo(outputStream)
@@ -108,7 +122,7 @@ class ExerciseStorageInitializer(
         )
     }
 
-    private companion object {
+    internal companion object {
         const val ASSET_DIRECTORY = "exercises"
         const val SAMPLE_FILE_NAME = "basic-quarter-notes.json"
         const val EXERCISE_MIME_TYPE = "application/json"
@@ -118,5 +132,7 @@ class ExerciseStorageInitializer(
         const val EXTERNAL_STORAGE_DOCUMENTS_AUTHORITY =
             "com.android.externalstorage.documents"
         const val PRIMARY_STORAGE_DOCUMENT_ID = "primary"
+        private const val STORAGE_PREFERENCES_NAME = "exercise_storage"
+        private const val SAMPLE_SEEDED_KEY = "sample_seeded"
     }
 }

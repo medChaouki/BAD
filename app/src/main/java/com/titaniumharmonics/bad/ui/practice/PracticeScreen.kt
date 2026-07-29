@@ -1,7 +1,5 @@
 package com.titaniumharmonics.bad.ui.practice
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,8 +53,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.titaniumharmonics.bad.exercise.Exercise
-import com.titaniumharmonics.bad.exercise.OpenExerciseDocumentContract
-import com.titaniumharmonics.bad.exercise.OpenExerciseDocumentRequest
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.ExpectedNote
@@ -68,16 +65,20 @@ import kotlin.math.roundToInt
 fun PracticeRoute(
     onCreateExercise: () -> Unit,
     onModifyExercise: () -> Unit,
-    defaultExerciseFolderUri: String?,
+    onLoadExercise: () -> Unit,
+    documentUriToLoad: String?,
+    onDocumentLoadConsumed: () -> Unit,
     fileOperationsEnabled: Boolean,
     viewModel: PracticeViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
-    val practiceExercisePicker = rememberLauncherForActivityResult(
-        contract = OpenExerciseDocumentContract(),
-    ) { documentUri ->
-        documentUri?.let { viewModel.loadExercise(it.toString()) }
+
+    LaunchedEffect(documentUriToLoad) {
+        documentUriToLoad?.let { documentUri ->
+            viewModel.loadExercise(documentUri)
+            onDocumentLoadConsumed()
+        }
     }
 
     DisposableEffect(lifecycleOwner, viewModel) {
@@ -96,14 +97,7 @@ fun PracticeRoute(
         uiState = uiState,
         onCreateExercise = onCreateExercise,
         onModifyExercise = onModifyExercise,
-        onLoad = {
-            practiceExercisePicker.launch(
-                OpenExerciseDocumentRequest(
-                    mimeTypes = EXERCISE_MIME_TYPES,
-                    initialFolderUri = defaultExerciseFolderUri?.let(Uri::parse),
-                ),
-            )
-        },
+        onLoad = onLoadExercise,
         fileOperationsEnabled = fileOperationsEnabled,
         onUnload = viewModel::unloadExercise,
         onStart = viewModel::startPlayback,
@@ -1022,8 +1016,3 @@ private const val PREVIEW_MEASURE_START_FRACTION = 0.08f
 private const val PREVIEW_MEASURE_END_FRACTION = 0.92f
 private const val PREVIEW_NOTE_START_FRACTION = 0.20f
 private const val PREVIEW_NOTE_END_FRACTION = 0.80f
-private val EXERCISE_MIME_TYPES = arrayOf(
-    "application/json",
-    "text/json",
-    "text/plain",
-)

@@ -47,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.titaniumharmonics.bad.exercise.CreateExerciseDocumentContract
 import com.titaniumharmonics.bad.exercise.CreateExerciseDocumentRequest
+import com.titaniumharmonics.bad.exercise.ExerciseDocumentCatalog
 import com.titaniumharmonics.bad.ui.theme.BADTheme
 import kotlin.math.roundToInt
 
@@ -65,7 +66,10 @@ fun ExerciseEditorRoute(
     val createExerciseDocument = rememberLauncherForActivityResult(
         contract = CreateExerciseDocumentContract(),
     ) { createdDocumentUri ->
-        createdDocumentUri?.let { viewModel.saveExercise(it.toString()) }
+        createdDocumentUri?.let { documentUri ->
+            ExerciseDocumentCatalog(context).rememberDefaultFolderDocument(documentUri)
+            viewModel.saveExercise(documentUri.toString())
+        }
     }
 
     LaunchedEffect(documentUri) {

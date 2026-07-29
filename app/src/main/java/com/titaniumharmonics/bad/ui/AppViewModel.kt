@@ -33,20 +33,43 @@ class AppViewModel(
         mutableUiState.value = mutableUiState.value.copy(
             destination = AppDestination.EXERCISE_EDITOR,
             editorDocumentUri = null,
+            editorReturnDestination = AppDestination.PRACTICE,
         )
     }
 
-    fun modifyExercise(documentUri: String) {
-        mutableUiState.value = mutableUiState.value.copy(
-            destination = AppDestination.EXERCISE_EDITOR,
-            editorDocumentUri = documentUri,
+    fun openExerciseLibraryForPractice() {
+        mutableUiState.value = mutableUiState.value.openExerciseLibrary(
+            ExerciseLibraryPurpose.PRACTICE,
         )
     }
 
-    fun closeExerciseEditor() {
-        mutableUiState.value = mutableUiState.value.copy(
-            destination = AppDestination.PRACTICE,
-            editorDocumentUri = null,
+    fun openExerciseLibraryForModify() {
+        mutableUiState.value = mutableUiState.value.openExerciseLibrary(
+            ExerciseLibraryPurpose.MODIFY,
         )
+    }
+
+    fun openLibraryExercise(documentUri: String) {
+        mutableUiState.value = mutableUiState.value.openLibraryExercise(documentUri)
+    }
+
+    fun consumePracticeDocumentToLoad() {
+        mutableUiState.value = mutableUiState.value.copy(
+            practiceDocumentUriToLoad = null,
+        )
+    }
+
+    fun navigateBack() {
+        val state = mutableUiState.value
+        mutableUiState.value = when (state.destination) {
+            AppDestination.PRACTICE -> state
+            AppDestination.EXERCISE_LIBRARY -> state.copy(
+                destination = AppDestination.PRACTICE,
+            )
+            AppDestination.EXERCISE_EDITOR -> state.copy(
+                destination = state.editorReturnDestination,
+                editorDocumentUri = null,
+            )
+        }
     }
 }

@@ -16,7 +16,7 @@ implemented yet.
 ## Current features
 
 - Versioned, data-driven JSON exercise format
-- User-selected exercise loading and unloading through Android's file picker
+- Validated exercise-library loading and unloading for practice
 - Automatic `Download/B.A.D/assets` exercise folder initialization
 - Exercise validation with explicit error reporting
 - Musical tick-to-time conversion
@@ -31,6 +31,8 @@ implemented yet.
 - Full-screen practice playback with pause, resume, repeat, and stop controls
 - Branded adaptive launcher icon and orientation-aware startup screen
 - Exercise creation and modification with JSON file creation and overwriting
+- Purpose-aware exercise library with tap-to-load or tap-to-edit and
+  long-press deletion
 - Home screen sections for creating or modifying exercises and starting practice
 - Collapsible per-exercise playback controls for tempo, count-in, measure
   count, and downbeat-only clicks
@@ -61,10 +63,11 @@ app/src/main/assets/exercises/
 
 On Android 10 or newer, the first app launch creates
 `Download/B.A.D/assets/` in shared storage and copies
-`basic-quarter-notes.json` there when that sample is absent. Existing folders
-and files are never erased or overwritten. Load, Create, and Modify file
-pickers open in this directory by default while still allowing navigation
-elsewhere.
+`basic-quarter-notes.json` there when that sample is absent. This seeding runs
+only once per installation, so a sample deliberately deleted later is not
+recreated. Existing folders and files are never erased or overwritten. Create
+and the Exercise Library's Browse file pickers open in this directory by
+default while still allowing navigation elsewhere.
 
 Android 8 and 9 use an app-private external-storage fallback because creating a
 public Downloads folder would require a runtime storage permission.
@@ -145,6 +148,14 @@ Swiping a measure to the left reveals a red Delete action. Deletion occurs only
 after that action is pressed. Notes inside a deleted imported measure are
 removed, while notes in later measures shift left to preserve their position
 within the remaining measure sequence.
+
+Load and Modify open the same Exercise Library containing only files from the
+default folder that pass B.A.D. format and exercise validation. Tapping loads
+the selected exercise for Practice or opens it in the editor, according to the
+entry point. Pressing and holding requests permanent deletion with
+confirmation; the file is revalidated immediately before removal. Browse other
+folders keeps the Android document picker available for exercises stored
+elsewhere.
 
 ## Timing model
 
