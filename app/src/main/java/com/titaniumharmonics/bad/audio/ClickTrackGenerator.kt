@@ -32,6 +32,7 @@ object ClickTrackGenerator {
             exercise.countInMeasures.toLong(),
             exercise.timeSignature.numerator.toLong(),
         )
+        val measuresWithExpectedNotes = exercise.measuresWithExpectedNotes()
         return generateBeatTrack(
             durationNanos = timing.totalDurationNanos,
             beatCount = totalBeatCount,
@@ -40,6 +41,7 @@ object ClickTrackGenerator {
             beatTimeNanos = timing::beatTimeNanos,
             sampleRateHz = sampleRateHz,
             downbeatsOnly = downbeatsOnly,
+            measuresWithExpectedNotes = measuresWithExpectedNotes,
         )
     }
 
@@ -65,6 +67,7 @@ object ClickTrackGenerator {
             beatTimeNanos = timing::beatTimeNanos,
             sampleRateHz = sampleRateHz,
             downbeatsOnly = false,
+            measuresWithExpectedNotes = null,
         )
     }
 
@@ -76,6 +79,7 @@ object ClickTrackGenerator {
         beatTimeNanos: (Long) -> Long,
         sampleRateHz: Int,
         downbeatsOnly: Boolean,
+        measuresWithExpectedNotes: BooleanArray?,
     ): ShortArray {
         val sampleCount = ceil(
             durationNanos.toDouble() * sampleRateHz / NANOS_PER_SECOND,
@@ -91,6 +95,11 @@ object ClickTrackGenerator {
             val exerciseBeatIndex = beatIndex - countInBeatCount
             val isExerciseDownbeat =
                 exerciseBeatIndex % beatsPerMeasure == 0L
+            if (!isCountInBeat && measuresWithExpectedNotes != null) {
+                val exerciseMeasureIndex =
+                    (exerciseBeatIndex / beatsPerMeasure).toInt()
+                if (!measuresWithExpectedNotes[exerciseMeasureIndex]) continue
+            }
             if (downbeatsOnly && !isCountInBeat && !isExerciseDownbeat) continue
 
             val startSample = (
@@ -106,6 +115,28 @@ object ClickTrackGenerator {
             )
         }
         return samples
+    }
+
+    private fun Exercise.measuresWithExpectedNotes(): BooleanArray {
+        val numeratorTicks = Math.multiplyExact(
+            Math.multiplyExact(
+                ticksPerQuarterNote.toLong(),
+                timeSignature.numerator.toLong(),
+            ),
+            4L,
+        )
+        require(numeratorTicks % timeSignature.denominator == 0L) {
+            "ticksPerQuarterNote cannot represent this time signature exactly."
+        }
+        val ticksPerMeasure = numeratorTicks / timeSignature.denominator
+        return BooleanArray(measureCount).also { measuresWithNotes ->
+            notes.forEach { note ->
+                val measureIndex = (note.positionTicks / ticksPerMeasure).toInt()
+                if (measureIndex in measuresWithNotes.indices) {
+                    measuresWithNotes[measureIndex] = true
+                }
+            }
+        }
     }
 
     private fun mixClick(

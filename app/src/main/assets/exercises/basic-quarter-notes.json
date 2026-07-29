@@ -1,5 +1,6 @@
 {
-    "formatVersion": 1,
+  "fileType": "bad-exercise",
+  "formatVersion": 1,
     "id": "basic-quarter-notes",
     "name": "Quarter Note Inspection",
     "description": "Four measures of quarter notes.",

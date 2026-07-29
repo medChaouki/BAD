@@ -20,12 +20,47 @@ class ExerciseJsonCodecTest {
     }
 
     @Test
+    fun decode_rejectsFileWithoutBadExerciseMarker() {
+        val exception = assertThrows(InvalidExerciseFileException::class.java) {
+            ExerciseJsonCodec.decode(
+                validExerciseJson.replace("\"fileType\": \"bad-exercise\",\n", ""),
+            )
+        }
+
+        assertTrue(exception.message.orEmpty().contains("fileType"))
+    }
+
+    @Test
+    fun decode_rejectsIncorrectFileType() {
+        val exception = assertThrows(InvalidExerciseFileException::class.java) {
+            ExerciseJsonCodec.decode(
+                validExerciseJson.replace("bad-exercise", "some-other-file"),
+            )
+        }
+
+        assertTrue(exception.message.orEmpty().contains("Not a B.A.D. exercise file"))
+    }
+
+    @Test
     fun encodeThenDecode_preservesExercise() {
         val original = ExerciseJsonCodec.decode(validExerciseJson)
 
         val decoded = ExerciseJsonCodec.decode(ExerciseJsonCodec.encode(original))
 
         assertEquals(original, decoded)
+    }
+
+    @Test
+    fun decode_acceptsExerciseWithEmptyMeasures() {
+        val exercise = ExerciseJsonCodec.decode(
+            validExerciseJson.replace(
+                Regex("(?s)\"notes\": \\[.*]"),
+                "\"notes\": []",
+            ),
+        )
+
+        assertTrue(exercise.notes.isEmpty())
+        assertEquals(1, exercise.measureCount)
     }
 
     @Test
@@ -67,6 +102,7 @@ class ExerciseJsonCodecTest {
     private companion object {
         val validExerciseJson = """
             {
+                "fileType": "bad-exercise",
                 "formatVersion": 1,
                 "id": "basic-quarter-notes",
                 "name": "Quarter Note Inspection",

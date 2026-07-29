@@ -10,7 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import com.titaniumharmonics.bad.ui.practice.PracticeRoute
+import com.titaniumharmonics.bad.ui.BadApp
 import com.titaniumharmonics.bad.ui.startup.StartupScreen
 import com.titaniumharmonics.bad.ui.theme.BADTheme
 import kotlinx.coroutines.delay
@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
                 if (startupVisible) {
                     StartupScreen()
                 } else {
-                    PracticeRoute()
+                    BadApp()
                 }
             }
         }

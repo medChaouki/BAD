@@ -28,10 +28,6 @@ object ExerciseValidator {
         if (exercise.ticksPerQuarterNote <= 0) {
             add("ticksPerQuarterNote must be greater than zero.")
         }
-        if (exercise.notes.isEmpty()) {
-            add("Exercise must contain at least one expected note.")
-        }
-
         val durationCalculation = exercise.calculateDurationTicks()
         durationCalculation.validationError?.let(::add)
         val durationTicks = durationCalculation.durationTicks
