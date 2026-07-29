@@ -8,14 +8,16 @@ B.A.D. is an Android drum-practice application that will listen to drum or
 practice-pad hits, compare them with a rhythmic exercise, and judge whether
 each hit was early, on time, late, or missed.
 
-The project is currently an early version 1 prototype. It can load and run a
-single-lane exercise with a generated metronome and a scrolling Compose
-timeline. Microphone capture and hit detection are not implemented yet.
+The project is currently an early version 1 prototype. It can select, load,
+edit, save, and run a single-lane exercise with a generated metronome and a
+scrolling Compose timeline. Microphone capture and hit detection are not
+implemented yet.
 
 ## Current features
 
 - Versioned, data-driven JSON exercise format
-- Bundled exercise loading and unloading
+- User-selected exercise loading and unloading through Android's file picker
+- Automatic `Download/B.A.D/assets` exercise folder initialization
 - Exercise validation with explicit error reporting
 - Musical tick-to-time conversion
 - Monotonic practice-session clock
@@ -28,6 +30,8 @@ timeline. Microphone capture and hit detection are not implemented yet.
 - BPM-scaled beat highlights at the judgement line
 - Full-screen practice playback with pause, resume, repeat, and stop controls
 - Branded adaptive launcher icon and orientation-aware startup screen
+- Exercise creation and modification with JSON file creation and overwriting
+- Home screen sections for creating or modifying exercises and starting practice
 - Collapsible per-exercise playback controls for tempo, count-in, measure
   count, and downbeat-only clicks
 - Lifecycle-aware playback cleanup
@@ -48,16 +52,28 @@ timing. An emulator is sufficient for checking layout and application flow.
 
 ## Exercise format
 
-Exercises are stored as versioned JSON files under:
+Exercises are versioned JSON documents that can be stored anywhere exposed by
+Android's system file picker. A bundled example remains under:
 
 ```text
 app/src/main/assets/exercises/
 ```
 
+On Android 10 or newer, the first app launch creates
+`Download/B.A.D/assets/` in shared storage and copies
+`basic-quarter-notes.json` there when that sample is absent. Existing folders
+and files are never erased or overwritten. Load, Create, and Modify file
+pickers open in this directory by default while still allowing navigation
+elsewhere.
+
+Android 8 and 9 use an app-private external-storage fallback because creating a
+public Downloads folder would require a runtime storage permission.
+
 Example:
 
 ```json
 {
+  "fileType": "bad-exercise",
   "formatVersion": 1,
   "id": "basic-quarter-notes",
   "name": "Quarter Note Inspection",
@@ -81,6 +97,9 @@ Example:
   ]
 }
 ```
+
+`fileType` must be `bad-exercise`. It identifies the document before the
+remaining exercise structure and musical values are validated.
 
 `ticksPerQuarterNote` defines the musical resolution. At a resolution of 480:
 
@@ -106,7 +125,26 @@ app/src/main/java/com/titaniumharmonics/bad/
 ```
 
 The exercise, timing, and click-generation logic is kept separate from
-Compose and can be tested on the JVM.
+Compose and can be tested on the JVM. Exercise files are opened and created
+through Android's Storage Access Framework, so broad storage permission is not
+required.
+
+The editor currently changes the exercise name, BPM, and measure count. When
+an existing file is overwritten, its identifier, description, time signature,
+count-in, timing resolution, and notes are preserved unless a measure is
+deleted. Rhythm editing is not implemented yet. Newly added empty measures
+contain no expected notes; their duration comes from the exercise time
+signature and measure count.
+
+During playback, exercise metronome clicks are muted for measures containing no
+expected notes. Count-in audio remains unchanged, and the timeline and visual
+beat highlights continue through the silent measure so musical time stays
+visible.
+
+Swiping a measure to the left reveals a red Delete action. Deletion occurs only
+after that action is pressed. Notes inside a deleted imported measure are
+removed, while notes in later measures shift left to preserve their position
+within the remaining measure sequence.
 
 ## Timing model
 

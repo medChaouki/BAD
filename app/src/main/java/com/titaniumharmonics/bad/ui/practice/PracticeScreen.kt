@@ -1,5 +1,7 @@
 package com.titaniumharmonics.bad.ui.practice
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +54,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.OpenExerciseDocumentContract
+import com.titaniumharmonics.bad.exercise.OpenExerciseDocumentRequest
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.ExpectedNote
@@ -62,10 +66,19 @@ import kotlin.math.roundToInt
 
 @Composable
 fun PracticeRoute(
+    onCreateExercise: () -> Unit,
+    onModifyExercise: () -> Unit,
+    defaultExerciseFolderUri: String?,
+    fileOperationsEnabled: Boolean,
     viewModel: PracticeViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val practiceExercisePicker = rememberLauncherForActivityResult(
+        contract = OpenExerciseDocumentContract(),
+    ) { documentUri ->
+        documentUri?.let { viewModel.loadExercise(it.toString()) }
+    }
 
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
@@ -81,7 +94,17 @@ fun PracticeRoute(
 
     PracticeScreen(
         uiState = uiState,
-        onLoad = viewModel::loadExercise,
+        onCreateExercise = onCreateExercise,
+        onModifyExercise = onModifyExercise,
+        onLoad = {
+            practiceExercisePicker.launch(
+                OpenExerciseDocumentRequest(
+                    mimeTypes = EXERCISE_MIME_TYPES,
+                    initialFolderUri = defaultExerciseFolderUri?.let(Uri::parse),
+                ),
+            )
+        },
+        fileOperationsEnabled = fileOperationsEnabled,
         onUnload = viewModel::unloadExercise,
         onStart = viewModel::startPlayback,
         onStop = viewModel::stopPlayback,
@@ -101,7 +124,10 @@ fun PracticeRoute(
 @Composable
 fun PracticeScreen(
     uiState: PracticeUiState,
+    onCreateExercise: () -> Unit,
+    onModifyExercise: () -> Unit,
     onLoad: () -> Unit,
+    fileOperationsEnabled: Boolean,
     onUnload: () -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
@@ -162,11 +188,31 @@ fun PracticeScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            EditorSection(
+                onCreateExercise = onCreateExercise,
+                onModifyExercise = onModifyExercise,
+                fileOperationsEnabled = fileOperationsEnabled,
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Practice",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Load an exercise and run a beat inspection.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             val exercise = playbackExercise
             if (exercise == null) {
                 EmptyExerciseCard(
                     uiState = uiState,
                     onLoad = onLoad,
+                    fileOperationsEnabled = fileOperationsEnabled,
                 )
             } else {
                 ExerciseCard(
@@ -486,9 +532,58 @@ private fun StepperSetting(
 }
 
 @Composable
+private fun EditorSection(
+    onCreateExercise: () -> Unit,
+    onModifyExercise: () -> Unit,
+    fileOperationsEnabled: Boolean,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Create or modify exercises",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "Build a new exercise or continue editing one.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(
+                    onClick = onCreateExercise,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Create")
+                }
+                OutlinedButton(
+                    onClick = onModifyExercise,
+                    enabled = fileOperationsEnabled,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Modify existing")
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun EmptyExerciseCard(
     uiState: PracticeUiState,
     onLoad: () -> Unit,
+    fileOperationsEnabled: Boolean,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -518,7 +613,7 @@ private fun EmptyExerciseCard(
             }
             Button(
                 onClick = onLoad,
-                enabled = uiState.phase != PracticePhase.LOADING,
+                enabled = fileOperationsEnabled && uiState.phase != PracticePhase.LOADING,
             ) {
                 Text(if (uiState.phase == PracticePhase.ERROR) "Try again" else "Load exercise")
             }
@@ -878,7 +973,10 @@ private fun PracticeScreenPreview() {
                 phase = PracticePhase.READY,
                 exerciseElapsedNanos = -2_400_000_000L,
             ),
+            onCreateExercise = {},
+            onModifyExercise = {},
             onLoad = {},
+            fileOperationsEnabled = true,
             onUnload = {},
             onStart = {},
             onStop = {},
@@ -924,3 +1022,8 @@ private const val PREVIEW_MEASURE_START_FRACTION = 0.08f
 private const val PREVIEW_MEASURE_END_FRACTION = 0.92f
 private const val PREVIEW_NOTE_START_FRACTION = 0.20f
 private const val PREVIEW_NOTE_END_FRACTION = 0.80f
+private val EXERCISE_MIME_TYPES = arrayOf(
+    "application/json",
+    "text/json",
+    "text/plain",
+)

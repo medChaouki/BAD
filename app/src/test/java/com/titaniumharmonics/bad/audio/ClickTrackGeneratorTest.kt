@@ -70,6 +70,34 @@ class ClickTrackGeneratorTest {
     }
 
     @Test
+    fun generate_mutesExerciseBeatsInsideEmptyMeasures() {
+        val exerciseWithEmptySecondMeasure = exercise.copy(
+            countInMeasures = 1,
+            measureCount = 2,
+            notes = listOf(ExpectedNote(positionTicks = 0)),
+        )
+        val samples = ClickTrackGenerator.generate(exerciseWithEmptySecondMeasure)
+        val samplesPerBeat = 24_000
+
+        repeat(8) { beat ->
+            assertTrue(
+                "No click detected on count-in or populated-measure beat ${beat + 1}",
+                peakNearBeat(samples, beat, samplesPerBeat) > 10_000,
+            )
+        }
+        repeat(4) { emptyMeasureBeatOffset ->
+            assertEquals(
+                0,
+                peakNearBeat(
+                    samples = samples,
+                    beat = 8 + emptyMeasureBeatOffset,
+                    samplesPerBeat = samplesPerBeat,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun generateCountIn_containsOnlyTheConfiguredAllBeatsCountIn() {
         val exerciseWithCountIn = exercise.copy(countInMeasures = 1)
         val samples = ClickTrackGenerator.generateCountIn(exerciseWithCountIn)

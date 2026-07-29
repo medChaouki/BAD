@@ -32,6 +32,7 @@ object ExerciseJsonCodec {
 
 @Serializable
 private data class ExerciseDto(
+    val fileType: String? = null,
     val formatVersion: Int,
     val id: String,
     val name: String,
@@ -43,21 +44,30 @@ private data class ExerciseDto(
     val ticksPerQuarterNote: Int,
     val notes: List<ExpectedNoteDto>,
 ) {
-    fun toDomain(): Exercise = Exercise(
-        formatVersion = formatVersion,
-        id = id,
-        name = name,
-        description = description,
-        tempoBpm = tempoBpm,
-        timeSignature = timeSignature.toDomain(),
-        countInMeasures = countInMeasures,
-        measureCount = measureCount,
-        ticksPerQuarterNote = ticksPerQuarterNote,
-        notes = notes.map(ExpectedNoteDto::toDomain),
-    )
+    fun toDomain(): Exercise {
+        if (fileType != ExerciseFormat.FILE_TYPE) {
+            throw InvalidExerciseFileException(
+                "Not a B.A.D. exercise file: fileType must be " +
+                    "\"${ExerciseFormat.FILE_TYPE}\".",
+            )
+        }
+        return Exercise(
+            formatVersion = formatVersion,
+            id = id,
+            name = name,
+            description = description,
+            tempoBpm = tempoBpm,
+            timeSignature = timeSignature.toDomain(),
+            countInMeasures = countInMeasures,
+            measureCount = measureCount,
+            ticksPerQuarterNote = ticksPerQuarterNote,
+            notes = notes.map(ExpectedNoteDto::toDomain),
+        )
+    }
 
     companion object {
         fun fromDomain(exercise: Exercise): ExerciseDto = ExerciseDto(
+            fileType = ExerciseFormat.FILE_TYPE,
             formatVersion = exercise.formatVersion,
             id = exercise.id,
             name = exercise.name,
@@ -71,6 +81,10 @@ private data class ExerciseDto(
         )
     }
 }
+
+class InvalidExerciseFileException(
+    message: String,
+) : IllegalArgumentException(message)
 
 @Serializable
 private data class TimeSignatureDto(

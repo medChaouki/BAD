@@ -5,8 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.titaniumharmonics.bad.audio.AudioTrackMetronome
 import com.titaniumharmonics.bad.audio.MetronomePlayer
-import com.titaniumharmonics.bad.exercise.AssetExerciseLoader
+import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.ExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.timing.AndroidMonotonicClock
 import com.titaniumharmonics.bad.timing.ExerciseTiming
@@ -32,7 +33,8 @@ class PracticeViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
     private val clock: MonotonicClock = AndroidMonotonicClock
-    private val exerciseLoader = AssetExerciseLoader(application.assets)
+    private val exerciseDocumentStore: ExerciseDocumentStore =
+        ContentResolverExerciseDocumentStore(application.contentResolver)
     private val metronomePlayer: MetronomePlayer = AudioTrackMetronome(clock)
     private val sessionElapsedClock = SessionElapsedClock(clock)
 
@@ -45,7 +47,7 @@ class PracticeViewModel(
     private var restartJob: Job? = null
     private var phaseBeforePause: PracticePhase = PracticePhase.RUNNING
 
-    fun loadExercise() {
+    fun loadExercise(documentUri: String) {
         if (loadJob?.isActive == true) return
         stopPlayback()
         mutableUiState.value = PracticeUiState(phase = PracticePhase.LOADING)
@@ -53,7 +55,7 @@ class PracticeViewModel(
         loadJob = viewModelScope.launch {
             try {
                 val exercise = withContext(Dispatchers.IO) {
-                    exerciseLoader.load(DEFAULT_EXERCISE_ASSET)
+                    exerciseDocumentStore.read(documentUri)
                 }
                 val timing = ExerciseTiming(exercise)
                 mutableUiState.value = PracticeUiState(
@@ -405,7 +407,6 @@ class PracticeViewModel(
     )
 
     private companion object {
-        const val DEFAULT_EXERCISE_ASSET = "basic-quarter-notes.json"
         const val RUN_STARTUP_DELAY_MILLIS = 2_000L
         const val UI_UPDATE_INTERVAL_MILLIS = 16L
     }
