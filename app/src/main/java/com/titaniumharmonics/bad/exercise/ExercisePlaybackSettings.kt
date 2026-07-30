@@ -39,6 +39,11 @@ data class ExercisePlaybackSettings(
             countInMeasures = if (countInEnabled) exercise.countInMeasures else 0,
             measureCount = measureCount,
             notes = repeatedNotes,
+            measureSubdivisions = List(measureCount) { measureIndex ->
+                exercise.measureSubdivisions[
+                    measureIndex % exercise.measureSubdivisions.size
+                ]
+            },
         )
     }
 

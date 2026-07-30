@@ -31,6 +31,7 @@ implemented yet.
 - Full-screen practice playback with pause, resume, repeat, and stop controls
 - Branded adaptive launcher icon and orientation-aware startup screen
 - Exercise creation and modification with JSON file creation and overwriting
+- Editable per-measure rhythmic grids with persisted subdivisions
 - Purpose-aware exercise library with tap-to-load or tap-to-edit and
   long-press deletion
 - Home screen sections for creating or modifying exercises and starting practice
@@ -89,6 +90,12 @@ Example:
   "countInMeasures": 1,
   "measureCount": 4,
   "ticksPerQuarterNote": 480,
+  "measureSubdivisions": [
+    "quarter",
+    "eighth",
+    "eighth_triplet",
+    "sixteenth"
+  ],
   "notes": [
     {
       "positionTicks": 0,
@@ -115,6 +122,12 @@ remaining exercise structure and musical values are validated.
 exercise. It is not a timer callback, audio sample index, or stored wall-clock
 timestamp.
 
+`measureSubdivisions` stores one display/editing grid per measure. Supported
+values are `quarter`, `eighth`, `eighth_triplet`, and `sixteenth`. Older
+exercise files without this field remain valid and use `quarter` for every
+measure. Changing a subdivision explicitly resets that measure with every slot
+in the new grid enabled.
+
 ## Project structure
 
 ```text
@@ -132,12 +145,15 @@ Compose and can be tested on the JVM. Exercise files are opened and created
 through Android's Storage Access Framework, so broad storage permission is not
 required.
 
-The editor currently changes the exercise name, BPM, and measure count. When
-an existing file is overwritten, its identifier, description, time signature,
-count-in, timing resolution, and notes are preserved unless a measure is
-deleted. Rhythm editing is not implemented yet. Newly added empty measures
-contain no expected notes; their duration comes from the exercise time
-signature and measure count.
+The editor changes the exercise name, BPM, measure count, each measure's
+persisted subdivision, and its note slots. New measures start with all four
+Quarter slots enabled. Selecting another subdivision resets that measure with
+every new slot enabled; tapping a slot then enables or disables its expected
+note. Notes outside the selected grid remain preserved and produce a warning
+until an explicit subdivision reset replaces the measure. When an existing
+file is overwritten, its identifier, description, time signature, count-in,
+and timing resolution are preserved. Measure duration comes from the exercise
+time signature and measure count.
 
 During playback, exercise metronome clicks are muted for measures containing no
 expected notes. Count-in audio remains unchanged, and the timeline and visual

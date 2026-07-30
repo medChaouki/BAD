@@ -10,6 +10,7 @@ import com.titaniumharmonics.bad.exercise.Exercise
 import com.titaniumharmonics.bad.exercise.ExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExpectedNote
+import com.titaniumharmonics.bad.exercise.MeasureSubdivision
 import com.titaniumharmonics.bad.exercise.TimeSignature
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -76,9 +77,14 @@ class ExerciseEditorViewModel(
             exerciseName = exercise.name,
             tempoBpmText = exercise.tempoBpm.toEditorText(),
             measures = List(exercise.measureCount) { index ->
-                EditorMeasureUiState(
+                EditorRhythmGrid.buildMeasure(
                     id = index + 1,
+                    editedMeasureIndex = index,
                     originalMeasureIndex = index,
+                    subdivision = exercise.measureSubdivisions[index],
+                    ticksPerQuarterNote = exercise.ticksPerQuarterNote,
+                    timeSignature = exercise.timeSignature,
+                    notes = exercise.editorNotesForMeasure(index),
                 )
             },
             sourceDocumentUri = documentUri,
@@ -97,8 +103,85 @@ class ExerciseEditorViewModel(
     fun addMeasure() {
         val state = mutableUiState.value
         val nextMeasureId = (state.measures.lastOrNull()?.id ?: 0) + 1
+        val ticksPerQuarterNote =
+            sourceExercise?.ticksPerQuarterNote ?: DEFAULT_TICKS_PER_QUARTER_NOTE
+        val timeSignature =
+            sourceExercise?.timeSignature ?: EditorRhythmGrid.DEFAULT_TIME_SIGNATURE
+        val subdivision = MeasureSubdivision.QUARTER
         mutableUiState.value = state.copy(
-            measures = state.measures + EditorMeasureUiState(id = nextMeasureId),
+            measures = state.measures + EditorRhythmGrid.buildMeasure(
+                id = nextMeasureId,
+                editedMeasureIndex = state.measures.size,
+                subdivision = subdivision,
+                ticksPerQuarterNote = ticksPerQuarterNote,
+                timeSignature = timeSignature,
+                notes = EditorRhythmGrid.fullyEnabledNotes(
+                    subdivision = subdivision,
+                    ticksPerQuarterNote = ticksPerQuarterNote,
+                    timeSignature = timeSignature,
+                ),
+            ),
+            message = null,
+            errorMessage = null,
+        )
+    }
+
+    fun setMeasureSubdivision(
+        measureId: Int,
+        subdivision: MeasureSubdivision,
+    ) {
+        val state = mutableUiState.value
+        if (state.measures.none { it.id == measureId }) return
+        val ticksPerQuarterNote =
+            sourceExercise?.ticksPerQuarterNote ?: DEFAULT_TICKS_PER_QUARTER_NOTE
+        val timeSignature =
+            sourceExercise?.timeSignature ?: EditorRhythmGrid.DEFAULT_TIME_SIGNATURE
+        val updatedMeasures = state.measures.map { measure ->
+            if (measure.id == measureId) {
+                measure.copy(
+                    subdivision = subdivision,
+                    notes = EditorRhythmGrid.fullyEnabledNotes(
+                        subdivision = subdivision,
+                        ticksPerQuarterNote = ticksPerQuarterNote,
+                        timeSignature = timeSignature,
+                    ),
+                )
+            } else {
+                measure
+            }
+        }.rebuildGrid(sourceExercise)
+        mutableUiState.value = state.copy(
+            measures = updatedMeasures,
+            message = null,
+            errorMessage = null,
+        )
+    }
+
+    fun toggleMeasureNote(
+        measureId: Int,
+        positionWithinMeasureTicks: Long,
+    ) {
+        val state = mutableUiState.value
+        val updatedMeasures = state.measures.map { measure ->
+            if (measure.id != measureId) return@map measure
+            val existingNote = measure.notes.find { note ->
+                note.positionWithinMeasureTicks == positionWithinMeasureTicks
+            }
+            val updatedNotes = if (existingNote == null) {
+                measure.notes + EditorNoteUiState(
+                    positionWithinMeasureTicks = positionWithinMeasureTicks,
+                )
+            } else {
+                measure.notes - existingNote
+            }
+            measure.copy(
+                notes = updatedNotes.sortedBy(
+                    EditorNoteUiState::positionWithinMeasureTicks,
+                ),
+            )
+        }.rebuildGrid(sourceExercise)
+        mutableUiState.value = state.copy(
+            measures = updatedMeasures,
             message = null,
             errorMessage = null,
         )
@@ -108,7 +191,9 @@ class ExerciseEditorViewModel(
         val state = mutableUiState.value
         if (state.measures.none { it.id == measureId }) return
         mutableUiState.value = state.copy(
-            measures = state.measures.filterNot { it.id == measureId },
+            measures = state.measures
+                .filterNot { it.id == measureId }
+                .rebuildGrid(sourceExercise),
             message = null,
             errorMessage = null,
         )
@@ -144,7 +229,13 @@ class ExerciseEditorViewModel(
                     documentStore.write(documentUri, exercise)
                 }
                 sourceExercise = exercise
+                val rebasedMeasures = mutableUiState.value.measures
+                    .mapIndexed { index, measure ->
+                        measure.copy(originalMeasureIndex = index)
+                    }
+                    .rebuildGrid(exercise)
                 mutableUiState.value = mutableUiState.value.copy(
+                    measures = rebasedMeasures,
                     sourceDocumentUri = documentUri,
                     isSaving = false,
                     message = "Exercise saved.",
@@ -177,9 +268,11 @@ class ExerciseEditorViewModel(
                 name = state.exerciseName.trim(),
                 tempoBpm = tempoBpm,
                 measureCount = state.measures.size,
-                notes = original.notes.remapToMeasures(
-                    originalExercise = original,
-                    editedMeasures = state.measures,
+                notes = state.measures.toExpectedNotes(
+                    ticksPerMeasure = original.ticksPerMeasure(),
+                ),
+                measureSubdivisions = state.measures.map(
+                    EditorMeasureUiState::subdivision,
                 ),
             )
         } ?: Exercise(
@@ -192,7 +285,12 @@ class ExerciseEditorViewModel(
             countInMeasures = 1,
             measureCount = state.measures.size,
             ticksPerQuarterNote = DEFAULT_TICKS_PER_QUARTER_NOTE,
-            notes = emptyList(),
+            notes = state.measures.toExpectedNotes(
+                ticksPerMeasure = DEFAULT_TICKS_PER_MEASURE,
+            ),
+            measureSubdivisions = state.measures.map(
+                EditorMeasureUiState::subdivision,
+            ),
         )
     }
 
@@ -236,30 +334,56 @@ private fun String.toExerciseId(): String {
     return normalized.ifBlank { "untitled-exercise" }
 }
 
-private fun List<ExpectedNote>.remapToMeasures(
-    originalExercise: Exercise,
-    editedMeasures: List<EditorMeasureUiState>,
-): List<ExpectedNote> {
-    val ticksPerMeasure =
-        originalExercise.ticksPerQuarterNote.toLong() *
-            originalExercise.timeSignature.numerator *
-            4L /
-            originalExercise.timeSignature.denominator
-    val newIndexByOriginalIndex = editedMeasures
-        .mapIndexedNotNull { editedIndex, measure ->
-            measure.originalMeasureIndex?.let { originalIndex ->
-                originalIndex to editedIndex
-            }
+private fun Exercise.editorNotesForMeasure(
+    measureIndex: Int,
+): List<EditorNoteUiState> {
+    val ticksPerMeasure = ticksPerMeasure()
+    val measureStart = measureIndex * ticksPerMeasure
+    val measureEnd = measureStart + ticksPerMeasure
+    return notes
+        .filter { note -> note.positionTicks in measureStart until measureEnd }
+        .map { note ->
+            EditorNoteUiState(
+                positionWithinMeasureTicks = note.positionTicks - measureStart,
+                accent = note.accent,
+                targetIntensity = note.targetIntensity,
+            )
         }
-        .toMap()
+}
 
-    return mapNotNull { note ->
-        val originalMeasureIndex = (note.positionTicks / ticksPerMeasure).toInt()
-        val editedMeasureIndex = newIndexByOriginalIndex[originalMeasureIndex]
-            ?: return@mapNotNull null
-        val positionWithinMeasure = note.positionTicks % ticksPerMeasure
-        note.copy(
-            positionTicks = editedMeasureIndex * ticksPerMeasure + positionWithinMeasure,
+private fun Exercise.ticksPerMeasure(): Long =
+    ticksPerQuarterNote.toLong() *
+        timeSignature.numerator *
+        4L /
+        timeSignature.denominator
+
+private fun List<EditorMeasureUiState>.toExpectedNotes(
+    ticksPerMeasure: Long,
+): List<ExpectedNote> = flatMapIndexed { measureIndex, measure ->
+    measure.notes.map { note ->
+        ExpectedNote(
+            positionTicks =
+                measureIndex * ticksPerMeasure + note.positionWithinMeasureTicks,
+            accent = note.accent,
+            targetIntensity = note.targetIntensity,
         )
     }
 }
+
+private fun List<EditorMeasureUiState>.rebuildGrid(
+    sourceExercise: Exercise?,
+): List<EditorMeasureUiState> = mapIndexed { editedIndex, measure ->
+    EditorRhythmGrid.buildMeasure(
+        id = measure.id,
+        editedMeasureIndex = editedIndex,
+        originalMeasureIndex = measure.originalMeasureIndex,
+        subdivision = measure.subdivision,
+        ticksPerQuarterNote = sourceExercise?.ticksPerQuarterNote
+            ?: EditorRhythmGrid.DEFAULT_TICKS_PER_QUARTER_NOTE,
+        timeSignature = sourceExercise?.timeSignature
+            ?: EditorRhythmGrid.DEFAULT_TIME_SIGNATURE,
+        notes = measure.notes,
+    )
+}
+
+private const val DEFAULT_TICKS_PER_MEASURE = 1_920L

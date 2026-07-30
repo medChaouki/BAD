@@ -3,6 +3,7 @@ package com.titaniumharmonics.bad.audio
 import com.titaniumharmonics.bad.exercise.Exercise
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExpectedNote
+import com.titaniumharmonics.bad.exercise.MeasureSubdivision
 import com.titaniumharmonics.bad.exercise.TimeSignature
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -75,6 +76,7 @@ class ClickTrackGeneratorTest {
             countInMeasures = 1,
             measureCount = 2,
             notes = listOf(ExpectedNote(positionTicks = 0)),
+            measureSubdivisions = List(2) { MeasureSubdivision.QUARTER },
         )
         val samples = ClickTrackGenerator.generate(exerciseWithEmptySecondMeasure)
         val samplesPerBeat = 24_000
