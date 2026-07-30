@@ -23,6 +23,7 @@ implemented yet.
 - Monotonic practice-session clock
 - Count-in, running, stopped, and completed states
 - Generated 48 kHz mono PCM metronome
+- Distinct quarter-note count-in and note-driven exercise clicks
 - Accented first beat of each measure
 - Streaming `AudioTrack` output
 - Single-lane scrolling rhythm timeline
@@ -155,10 +156,10 @@ file is overwritten, its identifier, description, time signature, count-in,
 and timing resolution are preserved. Measure duration comes from the exercise
 time signature and measure count.
 
-During playback, exercise metronome clicks are muted for measures containing no
-expected notes. Count-in audio remains unchanged, and the timeline and visual
-beat highlights continue through the silent measure so musical time stays
-visible.
+During playback, exercise metronome clicks occur only at exact expected-note
+ticks. Disabled notes and empty measures are silent. Count-in audio always uses
+Quarter notes with a distinct higher-pitched sound, while the timeline and
+visual beat highlights continue independently so musical time stays visible.
 
 Swiping a measure to the left reveals a red Delete action. Deletion occurs only
 after that action is pressed. Notes inside a deleted imported measure are
@@ -196,7 +197,8 @@ card toggles them without changing the configured values.
 
 The **First note only** option shows its enabled or disabled state beneath the
 label. When enabled, it keeps the full count-in audible, then plays the
-metronome only on the first beat of each exercise measure.
+metronome only when an expected note is enabled at the beginning of an exercise
+measure.
 
 During the exercise, every beat produces a brief green outline ring as it
 crosses the judgement line, including beats muted by downbeat-only mode. The
