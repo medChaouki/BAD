@@ -1,10 +1,11 @@
 package com.titaniumharmonics.bad.audio
 
-import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.EditableExercise
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExpectedNote
 import com.titaniumharmonics.bad.exercise.MeasureSubdivision
 import com.titaniumharmonics.bad.exercise.TimeSignature
+import com.titaniumharmonics.bad.exercise.compileForTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -12,7 +13,7 @@ import org.junit.Test
 import kotlin.math.abs
 
 class ClickTrackGeneratorTest {
-    private val exercise = Exercise(
+    private val editableExercise = EditableExercise(
         formatVersion = ExerciseFormat.CURRENT_VERSION,
         id = "click-test",
         name = "Click test",
@@ -29,6 +30,7 @@ class ClickTrackGeneratorTest {
             ExpectedNote(positionTicks = 1_440),
         ),
     )
+    private val exercise = editableExercise.compileForTest()
 
     @Test
     fun generate_createsTwoSecondsOf48kHzMonoSamples() {
@@ -57,13 +59,13 @@ class ClickTrackGeneratorTest {
 
     @Test
     fun generate_placesClicksAtEighthTripletAndSixteenthPositions() {
-        val selectedNotes = exercise.copy(
+        val selectedNotes = editableExercise.copy(
             notes = listOf(
                 ExpectedNote(positionTicks = 120),
                 ExpectedNote(positionTicks = 160),
                 ExpectedNote(positionTicks = 240),
             ),
-        )
+        ).compileForTest()
         val samples = ClickTrackGenerator.generate(selectedNotes)
 
         assertTrue(peakNearSample(samples, 6_000) > 10_000)
@@ -74,12 +76,12 @@ class ClickTrackGeneratorTest {
 
     @Test
     fun generate_doesNotClickAtDisabledGridPositions() {
-        val exerciseWithDisabledBeat = exercise.copy(
+        val exerciseWithDisabledBeat = editableExercise.copy(
             notes = listOf(
                 ExpectedNote(positionTicks = 0),
                 ExpectedNote(positionTicks = 960),
             ),
-        )
+        ).compileForTest()
         val samples = ClickTrackGenerator.generate(exerciseWithDisabledBeat)
 
         assertTrue(peakNearSample(samples, 0) > 10_000)
@@ -89,7 +91,9 @@ class ClickTrackGeneratorTest {
 
     @Test
     fun generate_downbeatsOnlyKeepsFullCountInAndMutesOtherExerciseBeats() {
-        val exerciseWithCountIn = exercise.copy(countInMeasures = 1)
+        val exerciseWithCountIn = editableExercise.copy(
+            countInMeasures = 1,
+        ).compileForTest()
         val samples = ClickTrackGenerator.generate(
             exercise = exerciseWithCountIn,
             downbeatsOnly = true,
@@ -110,12 +114,12 @@ class ClickTrackGeneratorTest {
 
     @Test
     fun generate_mutesExerciseBeatsInsideEmptyMeasures() {
-        val exerciseWithEmptySecondMeasure = exercise.copy(
+        val exerciseWithEmptySecondMeasure = editableExercise.copy(
             countInMeasures = 1,
             measureCount = 2,
             notes = listOf(ExpectedNote(positionTicks = 0)),
             measureSubdivisions = List(2) { MeasureSubdivision.QUARTER },
-        )
+        ).compileForTest()
         val samples = ClickTrackGenerator.generate(exerciseWithEmptySecondMeasure)
         val samplesPerBeat = 24_000
 
@@ -140,7 +144,9 @@ class ClickTrackGeneratorTest {
 
     @Test
     fun generateCountIn_containsOnlyTheConfiguredAllBeatsCountIn() {
-        val exerciseWithCountIn = exercise.copy(countInMeasures = 1)
+        val exerciseWithCountIn = editableExercise.copy(
+            countInMeasures = 1,
+        ).compileForTest()
         val samples = ClickTrackGenerator.generateCountIn(exerciseWithCountIn)
         val samplesPerBeat = 24_000
 
@@ -155,9 +161,9 @@ class ClickTrackGeneratorTest {
 
     @Test
     fun generate_downbeatsOnlyKeepsMeasureSilentWhenItsStartNoteIsDisabled() {
-        val exerciseWithoutMeasureStart = exercise.copy(
+        val exerciseWithoutMeasureStart = editableExercise.copy(
             notes = listOf(ExpectedNote(positionTicks = 480)),
-        )
+        ).compileForTest()
         val samples = ClickTrackGenerator.generate(
             exercise = exerciseWithoutMeasureStart,
             downbeatsOnly = true,
@@ -168,11 +174,11 @@ class ClickTrackGeneratorTest {
 
     @Test
     fun generateCountIn_alwaysUsesQuarterNotesForCompoundTimeSignatures() {
-        val sixEightExercise = exercise.copy(
+        val sixEightExercise = editableExercise.copy(
             timeSignature = TimeSignature(numerator = 6, denominator = 8),
             countInMeasures = 1,
             notes = listOf(ExpectedNote(positionTicks = 0)),
-        )
+        ).compileForTest()
         val samples = ClickTrackGenerator.generateCountIn(sixEightExercise)
 
         assertEquals(72_000, samples.size)
@@ -186,7 +192,7 @@ class ClickTrackGeneratorTest {
     @Test
     fun countInAndExerciseClicks_useDifferentSoundProfiles() {
         val countInSamples = ClickTrackGenerator.generateCountIn(
-            exercise.copy(countInMeasures = 1),
+            editableExercise.copy(countInMeasures = 1).compileForTest(),
         )
         val exerciseSamples = ClickTrackGenerator.generate(exercise)
 

@@ -1,6 +1,6 @@
 package com.titaniumharmonics.bad.audio
 
-import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.timing.ExerciseTiming
 import kotlin.math.PI
 import kotlin.math.ceil
@@ -15,7 +15,7 @@ object ClickTrackGenerator {
     private const val CLICK_DURATION_MILLIS = 25
 
     fun generate(
-        exercise: Exercise,
+        exercise: RuntimeExercise,
         sampleRateHz: Int = DEFAULT_SAMPLE_RATE_HZ,
         downbeatsOnly: Boolean = false,
     ): ShortArray {
@@ -54,7 +54,7 @@ object ClickTrackGenerator {
     }
 
     fun generateCountIn(
-        exercise: Exercise,
+        exercise: RuntimeExercise,
         sampleRateHz: Int = DEFAULT_SAMPLE_RATE_HZ,
     ): ShortArray {
         require(sampleRateHz > 0) { "sampleRateHz must be greater than zero." }
@@ -92,7 +92,7 @@ object ClickTrackGenerator {
 
     private fun mixCountIn(
         samples: ShortArray,
-        exercise: Exercise,
+        exercise: RuntimeExercise,
         timing: ExerciseTiming,
         sampleRateHz: Int,
     ) {

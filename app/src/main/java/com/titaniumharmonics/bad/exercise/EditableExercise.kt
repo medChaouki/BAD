@@ -1,6 +1,6 @@
 package com.titaniumharmonics.bad.exercise
 
-data class Exercise(
+data class EditableExercise(
     val formatVersion: Int,
     val id: String,
     val name: String,

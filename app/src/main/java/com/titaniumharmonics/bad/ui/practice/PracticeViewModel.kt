@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.titaniumharmonics.bad.audio.AudioTrackMetronome
 import com.titaniumharmonics.bad.audio.MetronomePlayer
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
-import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.ExerciseCompilationResult
+import com.titaniumharmonics.bad.exercise.ExerciseCompiler
 import com.titaniumharmonics.bad.exercise.ExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
+import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.timing.AndroidMonotonicClock
 import com.titaniumharmonics.bad.timing.ExerciseTiming
 import com.titaniumharmonics.bad.timing.MonotonicClock
@@ -54,8 +56,20 @@ class PracticeViewModel(
 
         loadJob = viewModelScope.launch {
             try {
-                val exercise = withContext(Dispatchers.IO) {
+                val editableExercise = withContext(Dispatchers.IO) {
                     exerciseDocumentStore.read(documentUri)
+                }
+                val exercise = when (
+                    val compilation = ExerciseCompiler.compile(editableExercise)
+                ) {
+                    is ExerciseCompilationResult.Success -> compilation.exercise
+                    is ExerciseCompilationResult.Failure -> {
+                        mutableUiState.value = PracticeUiState(
+                            phase = PracticePhase.ERROR,
+                            errorMessage = compilation.validationErrors.joinToString("\n"),
+                        )
+                        return@launch
+                    }
                 }
                 val timing = ExerciseTiming(exercise)
                 mutableUiState.value = PracticeUiState(
@@ -222,7 +236,7 @@ class PracticeViewModel(
         }
     }
 
-    private suspend fun runResumeCountIn(exercise: Exercise) {
+    private suspend fun runResumeCountIn(exercise: RuntimeExercise) {
         val timing = ExerciseTiming(exercise)
         mutableUiState.value = mutableUiState.value.copy(
             phase = PracticePhase.RESUME_COUNT_IN,

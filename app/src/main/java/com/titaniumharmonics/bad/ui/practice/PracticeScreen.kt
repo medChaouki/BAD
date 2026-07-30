@@ -52,10 +52,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.titaniumharmonics.bad.exercise.Exercise
-import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
-import com.titaniumharmonics.bad.exercise.ExpectedNote
+import com.titaniumharmonics.bad.exercise.RuntimeExercise
+import com.titaniumharmonics.bad.exercise.RuntimeExpectedNote
+import com.titaniumharmonics.bad.exercise.RuntimeMeasure
 import com.titaniumharmonics.bad.exercise.TimeSignature
 import com.titaniumharmonics.bad.timing.ExerciseTiming
 import com.titaniumharmonics.bad.ui.theme.BADTheme
@@ -258,7 +258,7 @@ fun PracticeScreen(
 
 @Composable
 private fun FullScreenPracticePlayer(
-    exercise: Exercise,
+    exercise: RuntimeExercise,
     uiState: PracticeUiState,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -617,7 +617,7 @@ private fun EmptyExerciseCard(
 
 @Composable
 private fun ExerciseCard(
-    exercise: Exercise,
+    exercise: RuntimeExercise,
     playbackSettingsExpanded: Boolean,
     onTogglePlaybackSettings: () -> Unit,
 ) {
@@ -699,7 +699,7 @@ private fun ExerciseFact(
 
 @Composable
 private fun ExerciseTimeline(
-    exercise: Exercise,
+    exercise: RuntimeExercise,
     exerciseElapsedNanos: Long,
     modifier: Modifier = Modifier,
     fullScreen: Boolean = false,
@@ -941,20 +941,29 @@ private fun SessionControls(
 @Preview(showBackground = true, widthDp = 420)
 @Composable
 private fun PracticeScreenPreview() {
-    val previewExercise = Exercise(
-        formatVersion = ExerciseFormat.CURRENT_VERSION,
+    val previewExercise = RuntimeExercise(
         id = "preview",
         name = "Quarter Note Inspection",
         description = "Four measures of quarter notes.",
         tempoBpm = 100.0,
         timeSignature = TimeSignature(4, 4),
         countInMeasures = 1,
-        measureCount = 4,
         ticksPerQuarterNote = 480,
-        notes = (0 until 16).map { noteIndex ->
-            ExpectedNote(
-                positionTicks = noteIndex * 480L,
-                accent = noteIndex % 4 == 0,
+        measures = List(4) { measureIndex ->
+            val measureStartTick = measureIndex * 1_920L
+            RuntimeMeasure(
+                index = measureIndex,
+                startTick = measureStartTick,
+                durationTicks = 1_920L,
+                notes = List(4) { noteIndex ->
+                    val localPositionTicks = noteIndex * 480L
+                    RuntimeExpectedNote(
+                        measureIndex = measureIndex,
+                        positionInMeasureTicks = localPositionTicks,
+                        positionTicks = measureStartTick + localPositionTicks,
+                        accent = noteIndex == 0,
+                    )
+                },
             )
         },
     )

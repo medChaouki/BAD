@@ -16,6 +16,7 @@ implemented yet.
 ## Current features
 
 - Versioned, data-driven JSON exercise format
+- Separate persisted editable and compiled runtime exercise models
 - Validated exercise-library loading and unloading for practice
 - Automatic `Download/B.A.D/assets` exercise folder initialization
 - Exercise validation with explicit error reporting
@@ -142,9 +143,14 @@ app/src/main/java/com/titaniumharmonics/bad/
 ```
 
 The exercise, timing, and click-generation logic is kept separate from
-Compose and can be tested on the JVM. Exercise files are opened and created
-through Android's Storage Access Framework, so broad storage permission is not
-required.
+Compose and can be tested on the JVM. Validated JSON is decoded into the
+persisted `EditableExercise` source of truth. Practice mode compiles it in
+memory into an immutable `RuntimeExercise` containing sequential measures and
+expected notes with measure-local and absolute tick positions. Timing,
+timeline, and metronome code use only this runtime representation; the editor
+and storage layers continue to use the persisted representation. Exercise
+files are opened and created through Android's Storage Access Framework, so
+broad storage permission is not required.
 
 The editor changes the exercise name, BPM, measure count, each measure's
 persisted subdivision, and its note slots. New measures start with all four

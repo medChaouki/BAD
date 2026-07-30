@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExercisePlaybackSettingsTest {
-    private val exercise = Exercise(
+    private val editableExercise = EditableExercise(
         formatVersion = ExerciseFormat.CURRENT_VERSION,
         id = "playback-settings-test",
         name = "Playback settings test",
@@ -25,6 +25,7 @@ class ExercisePlaybackSettingsTest {
             MeasureSubdivision.EIGHTH,
         ),
     )
+    private val exercise = editableExercise.compileForTest()
 
     @Test
     fun fromExercise_usesLoadedExerciseDefaults() {
@@ -74,15 +75,6 @@ class ExercisePlaybackSettingsTest {
             listOf(0L, 1_920L, 3_840L, 5_760L, 7_680L),
             configuredExercise.notes.map { it.positionTicks },
         )
-        assertEquals(
-            listOf(
-                MeasureSubdivision.QUARTER,
-                MeasureSubdivision.EIGHTH,
-                MeasureSubdivision.QUARTER,
-                MeasureSubdivision.EIGHTH,
-                MeasureSubdivision.QUARTER,
-            ),
-            configuredExercise.measureSubdivisions,
-        )
+        assertEquals(listOf(0, 1, 2, 3, 4), configuredExercise.measures.map { it.index })
     }
 }

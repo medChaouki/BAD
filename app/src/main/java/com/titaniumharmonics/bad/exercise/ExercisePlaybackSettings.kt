@@ -15,51 +15,39 @@ data class ExercisePlaybackSettings(
         }
     }
 
-    fun applyTo(exercise: Exercise): Exercise {
-        val sourceDurationTicks = exercise.durationTicks()
-        val targetDurationTicks = exercise.durationTicks(measureCount)
-        val repeatedNotes = buildList {
-            var cycleOffsetTicks = 0L
-            while (cycleOffsetTicks < targetDurationTicks) {
-                exercise.notes.forEach { note ->
-                    val repeatedPositionTicks = Math.addExact(
-                        note.positionTicks,
-                        cycleOffsetTicks,
+    fun applyTo(exercise: RuntimeExercise): RuntimeExercise {
+        val measureDurationTicks = exercise.measures.first().durationTicks
+        val runtimeMeasures = List(measureCount) { measureIndex ->
+            val sourceMeasure = exercise.measures[measureIndex % exercise.measureCount]
+            val startTick = Math.multiplyExact(
+                measureDurationTicks,
+                measureIndex.toLong(),
+            )
+            RuntimeMeasure(
+                index = measureIndex,
+                startTick = startTick,
+                durationTicks = measureDurationTicks,
+                notes = sourceMeasure.notes.map { note ->
+                    note.copy(
+                        measureIndex = measureIndex,
+                        positionTicks = Math.addExact(
+                            startTick,
+                            note.positionInMeasureTicks,
+                        ),
                     )
-                    if (repeatedPositionTicks < targetDurationTicks) {
-                        add(note.copy(positionTicks = repeatedPositionTicks))
-                    }
-                }
-                cycleOffsetTicks = Math.addExact(cycleOffsetTicks, sourceDurationTicks)
-            }
+                },
+            )
         }
 
-        return exercise.copy(
+        return RuntimeExercise(
+            id = exercise.id,
+            name = exercise.name,
+            description = exercise.description,
             tempoBpm = tempoBpm.toDouble(),
+            timeSignature = exercise.timeSignature,
             countInMeasures = if (countInEnabled) exercise.countInMeasures else 0,
-            measureCount = measureCount,
-            notes = repeatedNotes,
-            measureSubdivisions = List(measureCount) { measureIndex ->
-                exercise.measureSubdivisions[
-                    measureIndex % exercise.measureSubdivisions.size
-                ]
-            },
-        )
-    }
-
-    private fun Exercise.durationTicks(
-        measures: Int = measureCount,
-    ): Long {
-        val numeratorTicks = Math.multiplyExact(
-            Math.multiplyExact(ticksPerQuarterNote.toLong(), timeSignature.numerator.toLong()),
-            4L,
-        )
-        require(numeratorTicks % timeSignature.denominator == 0L) {
-            "ticksPerQuarterNote cannot represent this time signature exactly."
-        }
-        return Math.multiplyExact(
-            numeratorTicks / timeSignature.denominator,
-            measures.toLong(),
+            ticksPerQuarterNote = exercise.ticksPerQuarterNote,
+            measures = runtimeMeasures,
         )
     }
 
@@ -70,7 +58,7 @@ data class ExercisePlaybackSettings(
         const val MIN_MEASURE_COUNT = 1
         const val MAX_MEASURE_COUNT = 16
 
-        fun fromExercise(exercise: Exercise): ExercisePlaybackSettings =
+        fun fromExercise(exercise: RuntimeExercise): ExercisePlaybackSettings =
             ExercisePlaybackSettings(
                 tempoBpm = exercise.tempoBpm.toInt()
                     .coerceIn(MIN_TEMPO_BPM, MAX_TEMPO_BPM),

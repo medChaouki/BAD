@@ -1,7 +1,7 @@
 package com.titaniumharmonics.bad.exercise
 
 object ExerciseValidator {
-    fun validate(exercise: Exercise): List<String> = buildList {
+    fun validate(exercise: EditableExercise): List<String> = buildList {
         if (exercise.formatVersion != ExerciseFormat.CURRENT_VERSION) {
             add(
                 "Unsupported formatVersion ${exercise.formatVersion}; " +
@@ -63,7 +63,7 @@ object ExerciseValidator {
         }
     }
 
-    private fun Exercise.calculateDurationTicks(): DurationCalculation {
+    private fun EditableExercise.calculateDurationTicks(): DurationCalculation {
         if (
             ticksPerQuarterNote <= 0 ||
             measureCount <= 0 ||

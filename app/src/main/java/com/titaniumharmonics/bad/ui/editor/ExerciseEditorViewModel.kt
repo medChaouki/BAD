@@ -6,7 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
-import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.EditableExercise
 import com.titaniumharmonics.bad.exercise.ExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExpectedNote
@@ -27,7 +27,7 @@ class ExerciseEditorViewModel(
     private val mutableUiState = MutableStateFlow(ExerciseEditorUiState())
     val uiState: StateFlow<ExerciseEditorUiState> = mutableUiState.asStateFlow()
 
-    private var sourceExercise: Exercise? = null
+    private var sourceExercise: EditableExercise? = null
     private var documentJob: Job? = null
 
     fun createExercise() {
@@ -69,7 +69,7 @@ class ExerciseEditorViewModel(
     }
 
     internal fun applyLoadedExercise(
-        exercise: Exercise,
+        exercise: EditableExercise,
         documentUri: String,
     ) {
         sourceExercise = exercise
@@ -251,7 +251,9 @@ class ExerciseEditorViewModel(
         }
     }
 
-    internal fun buildEditedExercise(state: ExerciseEditorUiState = uiState.value): Exercise {
+    internal fun buildEditedExercise(
+        state: ExerciseEditorUiState = uiState.value,
+    ): EditableExercise {
         require(state.exerciseName.isNotBlank()) {
             "Exercise name must not be blank."
         }
@@ -275,7 +277,7 @@ class ExerciseEditorViewModel(
                     EditorMeasureUiState::subdivision,
                 ),
             )
-        } ?: Exercise(
+        } ?: EditableExercise(
             formatVersion = ExerciseFormat.CURRENT_VERSION,
             id = state.exerciseName.toExerciseId(),
             name = state.exerciseName.trim(),
@@ -334,7 +336,7 @@ private fun String.toExerciseId(): String {
     return normalized.ifBlank { "untitled-exercise" }
 }
 
-private fun Exercise.editorNotesForMeasure(
+private fun EditableExercise.editorNotesForMeasure(
     measureIndex: Int,
 ): List<EditorNoteUiState> {
     val ticksPerMeasure = ticksPerMeasure()
@@ -351,7 +353,7 @@ private fun Exercise.editorNotesForMeasure(
         }
 }
 
-private fun Exercise.ticksPerMeasure(): Long =
+private fun EditableExercise.ticksPerMeasure(): Long =
     ticksPerQuarterNote.toLong() *
         timeSignature.numerator *
         4L /
@@ -371,7 +373,7 @@ private fun List<EditorMeasureUiState>.toExpectedNotes(
 }
 
 private fun List<EditorMeasureUiState>.rebuildGrid(
-    sourceExercise: Exercise?,
+    sourceExercise: EditableExercise?,
 ): List<EditorMeasureUiState> = mapIndexed { editedIndex, measure ->
     EditorRhythmGrid.buildMeasure(
         id = measure.id,

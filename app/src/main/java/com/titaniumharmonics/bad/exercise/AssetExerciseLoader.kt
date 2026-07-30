@@ -7,7 +7,7 @@ class AssetExerciseLoader(
     private val assetManager: AssetManager,
 ) {
     @WorkerThread
-    fun load(assetFileName: String): Exercise {
+    fun load(assetFileName: String): EditableExercise {
         require(ASSET_FILE_NAME_PATTERN.matches(assetFileName)) {
             "Invalid exercise asset file name: $assetFileName"
         }

@@ -1,6 +1,6 @@
 package com.titaniumharmonics.bad.ui.editor
 
-import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.EditableExercise
 import com.titaniumharmonics.bad.exercise.ExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExpectedNote
@@ -79,7 +79,7 @@ class ExerciseEditorViewModelTest {
     @Test
     fun subdivisionSelection_resetsMeasureWithEveryNewSlotEnabled() {
         val viewModel = ExerciseEditorViewModel(FakeExerciseDocumentStore())
-        val original = Exercise(
+        val original = EditableExercise(
             formatVersion = ExerciseFormat.CURRENT_VERSION,
             id = "subdivision-test",
             name = "Subdivision test",
@@ -145,7 +145,7 @@ class ExerciseEditorViewModelTest {
     @Test
     fun buildEditedExercise_preservesUnsupportedLoadedFields() {
         val viewModel = ExerciseEditorViewModel(FakeExerciseDocumentStore())
-        val original = Exercise(
+        val original = EditableExercise(
             formatVersion = ExerciseFormat.CURRENT_VERSION,
             id = "original-id",
             name = "Original",
@@ -182,7 +182,7 @@ class ExerciseEditorViewModelTest {
     @Test
     fun buildEditedExercise_deletesMeasureNotesAndShiftsLaterNotes() {
         val viewModel = ExerciseEditorViewModel(FakeExerciseDocumentStore())
-        val original = Exercise(
+        val original = EditableExercise(
             formatVersion = ExerciseFormat.CURRENT_VERSION,
             id = "three-measures",
             name = "Three measures",
@@ -212,10 +212,10 @@ class ExerciseEditorViewModelTest {
     }
 
     private class FakeExerciseDocumentStore : ExerciseDocumentStore {
-        override fun read(documentUri: String): Exercise =
+        override fun read(documentUri: String): EditableExercise =
             error("Not used by this test.")
 
-        override fun write(documentUri: String, exercise: Exercise) {
+        override fun write(documentUri: String, exercise: EditableExercise) {
             error("Not used by this test.")
         }
     }

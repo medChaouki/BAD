@@ -1,19 +1,11 @@
 package com.titaniumharmonics.bad.timing
 
-import com.titaniumharmonics.bad.exercise.Exercise
-import com.titaniumharmonics.bad.exercise.ExerciseValidator
-import com.titaniumharmonics.bad.exercise.InvalidExerciseException
+import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import kotlin.math.roundToLong
 
 class ExerciseTiming(
-    private val exercise: Exercise,
+    private val exercise: RuntimeExercise,
 ) {
-    init {
-        val validationErrors = ExerciseValidator.validate(exercise)
-        if (validationErrors.isNotEmpty()) {
-            throw InvalidExerciseException(validationErrors)
-        }
-    }
 
     val beatDurationNanos: Long =
         durationToNanos(quarterNotes = 4.0 / exercise.timeSignature.denominator)
@@ -42,9 +34,8 @@ class ExerciseTiming(
 
     val exerciseDurationNanos: Long =
         durationToNanos(
-            quarterNotes = exercise.measureCount.toDouble() *
-                exercise.timeSignature.numerator *
-                4.0 / exercise.timeSignature.denominator,
+            quarterNotes = exercise.totalTicks.toDouble() /
+                exercise.ticksPerQuarterNote,
         )
 
     val totalDurationNanos: Long =
