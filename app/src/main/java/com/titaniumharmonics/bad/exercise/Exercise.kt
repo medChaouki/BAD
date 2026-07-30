@@ -11,7 +11,16 @@ data class Exercise(
     val measureCount: Int,
     val ticksPerQuarterNote: Int,
     val notes: List<ExpectedNote>,
+    val measureSubdivisions: List<MeasureSubdivision> =
+        defaultMeasureSubdivisions(measureCount),
 )
+
+enum class MeasureSubdivision {
+    QUARTER,
+    EIGHTH,
+    EIGHTH_TRIPLET,
+    SIXTEENTH,
+}
 
 data class TimeSignature(
     val numerator: Int,
@@ -23,3 +32,9 @@ data class ExpectedNote(
     val accent: Boolean = false,
     val targetIntensity: Double? = null,
 )
+
+private fun defaultMeasureSubdivisions(
+    measureCount: Int,
+): List<MeasureSubdivision> = List(measureCount.coerceAtLeast(0)) {
+    MeasureSubdivision.QUARTER
+}

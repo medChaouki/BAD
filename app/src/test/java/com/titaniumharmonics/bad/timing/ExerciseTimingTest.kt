@@ -3,6 +3,7 @@ package com.titaniumharmonics.bad.timing
 import com.titaniumharmonics.bad.exercise.Exercise
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExpectedNote
+import com.titaniumharmonics.bad.exercise.MeasureSubdivision
 import com.titaniumharmonics.bad.exercise.TimeSignature
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -59,7 +60,12 @@ class ExerciseTimingTest {
 
     @Test
     fun measureNumberAt_tracksPlaybackProgressAndClampsAtLastMeasure() {
-        val fourMeasureTiming = ExerciseTiming(exercise.copy(measureCount = 4))
+        val fourMeasureTiming = ExerciseTiming(
+            exercise.copy(
+                measureCount = 4,
+                measureSubdivisions = List(4) { MeasureSubdivision.QUARTER },
+            ),
+        )
 
         assertEquals(1, fourMeasureTiming.measureNumberAt(0L))
         assertEquals(1, fourMeasureTiming.measureNumberAt(2_399_999_999L))

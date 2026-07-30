@@ -25,6 +25,12 @@ object ExerciseValidator {
         if (exercise.measureCount <= 0) {
             add("measureCount must be greater than zero.")
         }
+        if (exercise.measureSubdivisions.size != exercise.measureCount) {
+            add(
+                "measureSubdivisions must contain exactly one entry per measure " +
+                    "(${exercise.measureCount} expected).",
+            )
+        }
         if (exercise.ticksPerQuarterNote <= 0) {
             add("ticksPerQuarterNote must be greater than zero.")
         }

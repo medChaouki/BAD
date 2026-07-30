@@ -1,5 +1,6 @@
 package com.titaniumharmonics.bad.exercise
 
+import kotlinx.serialization.SerializationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -17,6 +18,28 @@ class ExerciseJsonCodecTest {
         assertEquals(480, exercise.ticksPerQuarterNote)
         assertEquals(listOf(0L, 480L, 960L, 1440L), exercise.notes.map { it.positionTicks })
         assertTrue(exercise.notes.first().accent)
+        assertEquals(
+            listOf(MeasureSubdivision.QUARTER),
+            exercise.measureSubdivisions,
+        )
+    }
+
+    @Test
+    fun decode_readsPersistedMeasureSubdivisions() {
+        val exercise = ExerciseJsonCodec.decode(
+            validExerciseJson.replace(
+                "\"ticksPerQuarterNote\": 480,",
+                """
+                    "ticksPerQuarterNote": 480,
+                    "measureSubdivisions": ["eighth_triplet"],
+                """.trimIndent(),
+            ),
+        )
+
+        assertEquals(
+            listOf(MeasureSubdivision.EIGHTH_TRIPLET),
+            exercise.measureSubdivisions,
+        )
     }
 
     @Test
@@ -97,6 +120,55 @@ class ExerciseJsonCodecTest {
         }
 
         assertTrue(exception.validationErrors.any { it.contains("cannot represent") })
+    }
+
+    @Test
+    fun encodeRejectsSubdivisionCountThatDoesNotMatchMeasures() {
+        val exercise = ExerciseJsonCodec.decode(validExerciseJson).copy(
+            measureSubdivisions = emptyList(),
+        )
+
+        val exception = assertThrows(InvalidExerciseException::class.java) {
+            ExerciseJsonCodec.encode(exercise)
+        }
+
+        assertTrue(
+            exception.validationErrors.any { it.contains("one entry per measure") },
+        )
+    }
+
+    @Test
+    fun decodeRejectsSubdivisionCountThatDoesNotMatchMeasures() {
+        val exception = assertThrows(InvalidExerciseException::class.java) {
+            ExerciseJsonCodec.decode(
+                validExerciseJson.replace(
+                    "\"ticksPerQuarterNote\": 480,",
+                    """
+                        "ticksPerQuarterNote": 480,
+                        "measureSubdivisions": ["quarter", "eighth"],
+                    """.trimIndent(),
+                ),
+            )
+        }
+
+        assertTrue(
+            exception.validationErrors.any { it.contains("one entry per measure") },
+        )
+    }
+
+    @Test
+    fun decodeRejectsUnknownSubdivisionName() {
+        assertThrows(SerializationException::class.java) {
+            ExerciseJsonCodec.decode(
+                validExerciseJson.replace(
+                    "\"ticksPerQuarterNote\": 480,",
+                    """
+                        "ticksPerQuarterNote": 480,
+                        "measureSubdivisions": ["thirty_second"],
+                    """.trimIndent(),
+                ),
+            )
+        }
     }
 
     private companion object {

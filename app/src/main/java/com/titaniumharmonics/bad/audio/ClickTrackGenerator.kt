@@ -22,27 +22,35 @@ object ClickTrackGenerator {
         require(sampleRateHz > 0) { "sampleRateHz must be greater than zero." }
 
         val timing = ExerciseTiming(exercise)
-        val totalMeasureCount =
-            exercise.countInMeasures.toLong() + exercise.measureCount
-        val totalBeatCount = Math.multiplyExact(
-            totalMeasureCount,
-            exercise.timeSignature.numerator.toLong(),
-        )
-        val countInBeatCount = Math.multiplyExact(
-            exercise.countInMeasures.toLong(),
-            exercise.timeSignature.numerator.toLong(),
-        )
-        val measuresWithExpectedNotes = exercise.measuresWithExpectedNotes()
-        return generateBeatTrack(
+        val samples = createSampleBuffer(
             durationNanos = timing.totalDurationNanos,
-            beatCount = totalBeatCount,
-            countInBeatCount = countInBeatCount,
-            beatsPerMeasure = exercise.timeSignature.numerator,
-            beatTimeNanos = timing::beatTimeNanos,
             sampleRateHz = sampleRateHz,
-            downbeatsOnly = downbeatsOnly,
-            measuresWithExpectedNotes = measuresWithExpectedNotes,
         )
+        mixCountIn(
+            samples = samples,
+            exercise = exercise,
+            timing = timing,
+            sampleRateHz = sampleRateHz,
+        )
+
+        exercise.notes.forEach { note ->
+            val isMeasureStart =
+                note.positionTicks % timing.measureDurationTicks == 0L
+            if (downbeatsOnly && !isMeasureStart) return@forEach
+
+            val noteTimeNanos = Math.addExact(
+                timing.countInDurationNanos,
+                timing.ticksToNanos(note.positionTicks),
+            )
+            mixClick(
+                samples = samples,
+                startSample = noteTimeNanos.toSampleIndex(sampleRateHz),
+                sampleRateHz = sampleRateHz,
+                isAccent = note.accent || isMeasureStart,
+                sound = ClickSound.EXERCISE,
+            )
+        }
+        return samples
     }
 
     fun generateCountIn(
@@ -55,31 +63,22 @@ object ClickTrackGenerator {
         }
 
         val timing = ExerciseTiming(exercise)
-        val countInBeatCount = Math.multiplyExact(
-            exercise.countInMeasures.toLong(),
-            exercise.timeSignature.numerator.toLong(),
-        )
-        return generateBeatTrack(
+        val samples = createSampleBuffer(
             durationNanos = timing.countInDurationNanos,
-            beatCount = countInBeatCount,
-            countInBeatCount = countInBeatCount,
-            beatsPerMeasure = exercise.timeSignature.numerator,
-            beatTimeNanos = timing::beatTimeNanos,
             sampleRateHz = sampleRateHz,
-            downbeatsOnly = false,
-            measuresWithExpectedNotes = null,
         )
+        mixCountIn(
+            samples = samples,
+            exercise = exercise,
+            timing = timing,
+            sampleRateHz = sampleRateHz,
+        )
+        return samples
     }
 
-    private fun generateBeatTrack(
+    private fun createSampleBuffer(
         durationNanos: Long,
-        beatCount: Long,
-        countInBeatCount: Long,
-        beatsPerMeasure: Int,
-        beatTimeNanos: (Long) -> Long,
         sampleRateHz: Int,
-        downbeatsOnly: Boolean,
-        measuresWithExpectedNotes: BooleanArray?,
     ): ShortArray {
         val sampleCount = ceil(
             durationNanos.toDouble() * sampleRateHz / NANOS_PER_SECOND,
@@ -88,54 +87,36 @@ object ClickTrackGenerator {
         require(sampleCount <= Int.MAX_VALUE && bufferByteCount <= MAX_BUFFER_BYTES) {
             "Metronome audio is too long for the static sample buffer."
         }
-
-        val samples = ShortArray(sampleCount.toInt())
-        for (beatIndex in 0 until beatCount) {
-            val isCountInBeat = beatIndex < countInBeatCount
-            val exerciseBeatIndex = beatIndex - countInBeatCount
-            val isExerciseDownbeat =
-                exerciseBeatIndex % beatsPerMeasure == 0L
-            if (!isCountInBeat && measuresWithExpectedNotes != null) {
-                val exerciseMeasureIndex =
-                    (exerciseBeatIndex / beatsPerMeasure).toInt()
-                if (!measuresWithExpectedNotes[exerciseMeasureIndex]) continue
-            }
-            if (downbeatsOnly && !isCountInBeat && !isExerciseDownbeat) continue
-
-            val startSample = (
-                beatTimeNanos(beatIndex).toDouble() *
-                    sampleRateHz / NANOS_PER_SECOND
-                ).roundToInt()
-            val isAccent = beatIndex % beatsPerMeasure == 0L
-            mixClick(
-                samples = samples,
-                startSample = startSample,
-                sampleRateHz = sampleRateHz,
-                isAccent = isAccent,
-            )
-        }
-        return samples
+        return ShortArray(sampleCount.toInt())
     }
 
-    private fun Exercise.measuresWithExpectedNotes(): BooleanArray {
-        val numeratorTicks = Math.multiplyExact(
-            Math.multiplyExact(
-                ticksPerQuarterNote.toLong(),
-                timeSignature.numerator.toLong(),
-            ),
-            4L,
+    private fun mixCountIn(
+        samples: ShortArray,
+        exercise: Exercise,
+        timing: ExerciseTiming,
+        sampleRateHz: Int,
+    ) {
+        if (exercise.countInMeasures == 0) return
+
+        val countInDurationTicks = Math.multiplyExact(
+            timing.measureDurationTicks,
+            exercise.countInMeasures.toLong(),
         )
-        require(numeratorTicks % timeSignature.denominator == 0L) {
-            "ticksPerQuarterNote cannot represent this time signature exactly."
-        }
-        val ticksPerMeasure = numeratorTicks / timeSignature.denominator
-        return BooleanArray(measureCount).also { measuresWithNotes ->
-            notes.forEach { note ->
-                val measureIndex = (note.positionTicks / ticksPerMeasure).toInt()
-                if (measureIndex in measuresWithNotes.indices) {
-                    measuresWithNotes[measureIndex] = true
-                }
-            }
+        var countInPositionTicks = 0L
+        while (countInPositionTicks < countInDurationTicks) {
+            mixClick(
+                samples = samples,
+                startSample = timing.ticksToNanos(countInPositionTicks)
+                    .toSampleIndex(sampleRateHz),
+                sampleRateHz = sampleRateHz,
+                isAccent =
+                    countInPositionTicks % timing.measureDurationTicks == 0L,
+                sound = ClickSound.COUNT_IN,
+            )
+            countInPositionTicks = Math.addExact(
+                countInPositionTicks,
+                exercise.ticksPerQuarterNote.toLong(),
+            )
         }
     }
 
@@ -144,22 +125,21 @@ object ClickTrackGenerator {
         startSample: Int,
         sampleRateHz: Int,
         isAccent: Boolean,
+        sound: ClickSound,
     ) {
         val clickSampleCount = sampleRateHz * CLICK_DURATION_MILLIS / 1_000
-        val frequencyHz = if (isAccent) 1_600.0 else 1_050.0
-        val peakAmplitude = if (isAccent) 0.85 else 0.58
-        val decayTimeSeconds = if (isAccent) 0.009 else 0.007
+        val profile = sound.profile(isAccent)
 
         repeat(clickSampleCount) { clickSampleOffset ->
             val destinationIndex = startSample + clickSampleOffset
             if (destinationIndex >= samples.size) return
 
             val timeSeconds = clickSampleOffset.toDouble() / sampleRateHz
-            val envelope = exp(-timeSeconds / decayTimeSeconds)
+            val envelope = exp(-timeSeconds / profile.decayTimeSeconds)
             val clickSample =
-                sin(2.0 * PI * frequencyHz * timeSeconds) *
+                sin(2.0 * PI * profile.frequencyHz * timeSeconds) *
                     envelope *
-                    peakAmplitude *
+                    profile.peakAmplitude *
                     Short.MAX_VALUE
             val mixedSample = samples[destinationIndex].toInt() + clickSample.roundToInt()
             samples[destinationIndex] = mixedSample
@@ -167,6 +147,50 @@ object ClickTrackGenerator {
                 .toShort()
         }
     }
+
+    private fun Long.toSampleIndex(sampleRateHz: Int): Int =
+        (toDouble() * sampleRateHz / NANOS_PER_SECOND).roundToInt()
+
+    private enum class ClickSound {
+        COUNT_IN,
+        EXERCISE,
+        ;
+
+        fun profile(isAccent: Boolean): ClickProfile = when (this) {
+            COUNT_IN -> if (isAccent) {
+                ClickProfile(
+                    frequencyHz = 2_400.0,
+                    peakAmplitude = 0.90,
+                    decayTimeSeconds = 0.008,
+                )
+            } else {
+                ClickProfile(
+                    frequencyHz = 1_900.0,
+                    peakAmplitude = 0.68,
+                    decayTimeSeconds = 0.006,
+                )
+            }
+            EXERCISE -> if (isAccent) {
+                ClickProfile(
+                    frequencyHz = 1_600.0,
+                    peakAmplitude = 0.85,
+                    decayTimeSeconds = 0.009,
+                )
+            } else {
+                ClickProfile(
+                    frequencyHz = 1_050.0,
+                    peakAmplitude = 0.58,
+                    decayTimeSeconds = 0.007,
+                )
+            }
+        }
+    }
+
+    private data class ClickProfile(
+        val frequencyHz: Double,
+        val peakAmplitude: Double,
+        val decayTimeSeconds: Double,
+    )
 
     private const val NANOS_PER_SECOND = 1_000_000_000.0
 }

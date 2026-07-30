@@ -1,6 +1,7 @@
 package com.titaniumharmonics.bad.exercise
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
 
 object ExerciseJsonCodec {
@@ -43,6 +44,7 @@ private data class ExerciseDto(
     val measureCount: Int,
     val ticksPerQuarterNote: Int,
     val notes: List<ExpectedNoteDto>,
+    val measureSubdivisions: List<MeasureSubdivisionDto>? = null,
 ) {
     fun toDomain(): Exercise {
         if (fileType != ExerciseFormat.FILE_TYPE) {
@@ -62,6 +64,11 @@ private data class ExerciseDto(
             measureCount = measureCount,
             ticksPerQuarterNote = ticksPerQuarterNote,
             notes = notes.map(ExpectedNoteDto::toDomain),
+            measureSubdivisions = measureSubdivisions
+                ?.map(MeasureSubdivisionDto::toDomain)
+                ?: List(measureCount.coerceAtLeast(0)) {
+                    MeasureSubdivision.QUARTER
+                },
         )
     }
 
@@ -78,7 +85,43 @@ private data class ExerciseDto(
             measureCount = exercise.measureCount,
             ticksPerQuarterNote = exercise.ticksPerQuarterNote,
             notes = exercise.notes.map(ExpectedNoteDto::fromDomain),
+            measureSubdivisions = exercise.measureSubdivisions.map(
+                MeasureSubdivisionDto::fromDomain,
+            ),
         )
+    }
+}
+
+@Serializable
+private enum class MeasureSubdivisionDto {
+    @SerialName("quarter")
+    QUARTER,
+
+    @SerialName("eighth")
+    EIGHTH,
+
+    @SerialName("eighth_triplet")
+    EIGHTH_TRIPLET,
+
+    @SerialName("sixteenth")
+    SIXTEENTH,
+    ;
+
+    fun toDomain(): MeasureSubdivision = when (this) {
+        QUARTER -> MeasureSubdivision.QUARTER
+        EIGHTH -> MeasureSubdivision.EIGHTH
+        EIGHTH_TRIPLET -> MeasureSubdivision.EIGHTH_TRIPLET
+        SIXTEENTH -> MeasureSubdivision.SIXTEENTH
+    }
+
+    companion object {
+        fun fromDomain(subdivision: MeasureSubdivision): MeasureSubdivisionDto =
+            when (subdivision) {
+                MeasureSubdivision.QUARTER -> QUARTER
+                MeasureSubdivision.EIGHTH -> EIGHTH
+                MeasureSubdivision.EIGHTH_TRIPLET -> EIGHTH_TRIPLET
+                MeasureSubdivision.SIXTEENTH -> SIXTEENTH
+            }
     }
 }
 

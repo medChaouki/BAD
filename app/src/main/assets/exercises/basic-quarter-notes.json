@@ -12,6 +12,12 @@
     "countInMeasures": 1,
     "measureCount": 4,
     "ticksPerQuarterNote": 480,
+    "measureSubdivisions": [
+        "quarter",
+        "quarter",
+        "quarter",
+        "quarter"
+    ],
     "notes": [
         { "positionTicks": 0, "accent": true },
         { "positionTicks": 480 },

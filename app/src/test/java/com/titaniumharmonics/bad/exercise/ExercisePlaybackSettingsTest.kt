@@ -20,6 +20,10 @@ class ExercisePlaybackSettingsTest {
             ExpectedNote(positionTicks = 0, accent = true),
             ExpectedNote(positionTicks = 1_920, accent = true),
         ),
+        measureSubdivisions = listOf(
+            MeasureSubdivision.QUARTER,
+            MeasureSubdivision.EIGHTH,
+        ),
     )
 
     @Test
@@ -69,6 +73,16 @@ class ExercisePlaybackSettingsTest {
         assertEquals(
             listOf(0L, 1_920L, 3_840L, 5_760L, 7_680L),
             configuredExercise.notes.map { it.positionTicks },
+        )
+        assertEquals(
+            listOf(
+                MeasureSubdivision.QUARTER,
+                MeasureSubdivision.EIGHTH,
+                MeasureSubdivision.QUARTER,
+                MeasureSubdivision.EIGHTH,
+                MeasureSubdivision.QUARTER,
+            ),
+            configuredExercise.measureSubdivisions,
         )
     }
 }
