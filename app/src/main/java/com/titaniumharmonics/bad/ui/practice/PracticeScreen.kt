@@ -95,8 +95,18 @@ fun PracticeRoute(
 
     PracticeScreen(
         uiState = uiState,
-        onCreateExercise = onCreateExercise,
-        onModifyExercise = onModifyExercise,
+        onCreateExercise = {
+            navigateAwayFromPracticeForEditing(
+                unloadExercise = viewModel::unloadExercise,
+                navigate = onCreateExercise,
+            )
+        },
+        onModifyExercise = {
+            navigateAwayFromPracticeForEditing(
+                unloadExercise = viewModel::unloadExercise,
+                navigate = onModifyExercise,
+            )
+        },
         onLoad = onLoadExercise,
         fileOperationsEnabled = fileOperationsEnabled,
         onUnload = viewModel::unloadExercise,
@@ -112,6 +122,14 @@ fun PracticeRoute(
         onDecreaseMeasureCount = viewModel::decreaseMeasureCount,
         onIncreaseMeasureCount = viewModel::increaseMeasureCount,
     )
+}
+
+internal fun navigateAwayFromPracticeForEditing(
+    unloadExercise: () -> Unit,
+    navigate: () -> Unit,
+) {
+    unloadExercise()
+    navigate()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

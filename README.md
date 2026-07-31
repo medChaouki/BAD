@@ -183,6 +183,9 @@ measure-local tick and receives a new absolute position from its runtime
 measure offset, so Quarter, Eighth, Eighth-triplet, and Sixteenth timing remain
 exact.
 
+Opening Create or Modify clears the currently loaded in-memory practice
+exercise before navigating. Saved exercise files are not changed.
+
 During playback, exercise metronome clicks occur only at exact expected-note
 ticks. Disabled notes and empty measures are silent. Count-in audio always uses
 Quarter notes with a distinct higher-pitched sound, while the timeline and
