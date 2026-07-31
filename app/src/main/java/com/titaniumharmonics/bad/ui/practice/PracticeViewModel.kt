@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.titaniumharmonics.bad.audio.AudioTrackMetronome
 import com.titaniumharmonics.bad.audio.MetronomePlayer
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
-import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.ExerciseCompilationResult
+import com.titaniumharmonics.bad.exercise.ExerciseCompiler
 import com.titaniumharmonics.bad.exercise.ExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
+import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.timing.AndroidMonotonicClock
 import com.titaniumharmonics.bad.timing.ExerciseTiming
 import com.titaniumharmonics.bad.timing.MonotonicClock
@@ -47,15 +49,30 @@ class PracticeViewModel(
     private var restartJob: Job? = null
     private var phaseBeforePause: PracticePhase = PracticePhase.RUNNING
 
-    fun loadExercise(documentUri: String) {
+    fun loadExercise(
+        documentUri: String,
+        startAfterLoad: Boolean = false,
+    ) {
         if (loadJob?.isActive == true) return
         stopPlayback()
         mutableUiState.value = PracticeUiState(phase = PracticePhase.LOADING)
 
         loadJob = viewModelScope.launch {
             try {
-                val exercise = withContext(Dispatchers.IO) {
+                val editableExercise = withContext(Dispatchers.IO) {
                     exerciseDocumentStore.read(documentUri)
+                }
+                val exercise = when (
+                    val compilation = ExerciseCompiler.compile(editableExercise)
+                ) {
+                    is ExerciseCompilationResult.Success -> compilation.exercise
+                    is ExerciseCompilationResult.Failure -> {
+                        mutableUiState.value = PracticeUiState(
+                            phase = PracticePhase.ERROR,
+                            errorMessage = compilation.validationErrors.joinToString("\n"),
+                        )
+                        return@launch
+                    }
                 }
                 val timing = ExerciseTiming(exercise)
                 mutableUiState.value = PracticeUiState(
@@ -64,6 +81,9 @@ class PracticeViewModel(
                     phase = PracticePhase.READY,
                     exerciseElapsedNanos = -timing.countInDurationNanos,
                 )
+                if (startAfterLoad) {
+                    startPlayback()
+                }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
@@ -222,7 +242,7 @@ class PracticeViewModel(
         }
     }
 
-    private suspend fun runResumeCountIn(exercise: Exercise) {
+    private suspend fun runResumeCountIn(exercise: RuntimeExercise) {
         val timing = ExerciseTiming(exercise)
         mutableUiState.value = mutableUiState.value.copy(
             phase = PracticePhase.RESUME_COUNT_IN,
@@ -342,7 +362,7 @@ class PracticeViewModel(
         updatePlaybackSettings { settings ->
             settings.copy(
                 measureCount = (settings.measureCount + 1)
-                    .coerceAtMost(ExercisePlaybackSettings.MAX_MEASURE_COUNT),
+                    .coerceAtMost(settings.maximumMeasureCount),
             )
         }
     }

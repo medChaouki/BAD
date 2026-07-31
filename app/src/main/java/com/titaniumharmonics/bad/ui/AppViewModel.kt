@@ -56,7 +56,12 @@ class AppViewModel(
     fun consumePracticeDocumentToLoad() {
         mutableUiState.value = mutableUiState.value.copy(
             practiceDocumentUriToLoad = null,
+            startPracticeAfterLoad = false,
         )
+    }
+
+    fun playEditorExercise(documentUri: String) {
+        mutableUiState.value = mutableUiState.value.playEditorExercise(documentUri)
     }
 
     fun navigateBack() {

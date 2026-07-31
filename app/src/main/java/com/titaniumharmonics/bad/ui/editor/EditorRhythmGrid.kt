@@ -1,6 +1,7 @@
 package com.titaniumharmonics.bad.ui.editor
 
 import com.titaniumharmonics.bad.exercise.MeasureSubdivision
+import com.titaniumharmonics.bad.exercise.MeasurePatternConstraints
 import com.titaniumharmonics.bad.exercise.TimeSignature
 
 internal object EditorRhythmGrid {
@@ -12,6 +13,7 @@ internal object EditorRhythmGrid {
         editedMeasureIndex: Int,
         originalMeasureIndex: Int? = null,
         subdivision: MeasureSubdivision = MeasureSubdivision.QUARTER,
+        multiplier: Int = MeasurePatternConstraints.DEFAULT_MULTIPLIER,
         ticksPerQuarterNote: Int = DEFAULT_TICKS_PER_QUARTER_NOTE,
         timeSignature: TimeSignature = DEFAULT_TIME_SIGNATURE,
         notes: List<EditorNoteUiState> = emptyList(),
@@ -21,6 +23,7 @@ internal object EditorRhythmGrid {
                 id = id,
                 originalMeasureIndex = originalMeasureIndex,
                 subdivision = subdivision,
+                multiplier = multiplier,
                 notes = notes,
                 unmappedNoteCount = notes.size,
                 gridUnavailableReason = "Rhythmic grid supports 4/4 exercises only.",
@@ -33,6 +36,7 @@ internal object EditorRhythmGrid {
                 id = id,
                 originalMeasureIndex = originalMeasureIndex,
                 subdivision = subdivision,
+                multiplier = multiplier,
                 notes = notes,
                 unmappedNoteCount = notes.size,
                 gridUnavailableReason =
@@ -73,6 +77,7 @@ internal object EditorRhythmGrid {
             id = id,
             originalMeasureIndex = originalMeasureIndex,
             subdivision = subdivision,
+            multiplier = multiplier,
             notes = notes,
             slots = slots,
             unmappedNoteCount = notes.count { note ->

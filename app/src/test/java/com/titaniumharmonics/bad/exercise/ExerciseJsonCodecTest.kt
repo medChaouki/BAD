@@ -22,6 +22,22 @@ class ExerciseJsonCodecTest {
             listOf(MeasureSubdivision.QUARTER),
             exercise.measureSubdivisions,
         )
+        assertEquals(listOf(1), exercise.measureMultipliers)
+    }
+
+    @Test
+    fun decode_readsPersistedMeasureMultipliers() {
+        val exercise = ExerciseJsonCodec.decode(
+            validExerciseJson.replace(
+                "\"ticksPerQuarterNote\": 480,",
+                """
+                    "ticksPerQuarterNote": 480,
+                    "measureMultipliers": [4],
+                """.trimIndent(),
+            ),
+        )
+
+        assertEquals(listOf(4), exercise.measureMultipliers)
     }
 
     @Test
@@ -66,10 +82,14 @@ class ExerciseJsonCodecTest {
 
     @Test
     fun encodeThenDecode_preservesExercise() {
-        val original = ExerciseJsonCodec.decode(validExerciseJson)
+        val original = ExerciseJsonCodec.decode(validExerciseJson).copy(
+            measureMultipliers = listOf(4),
+        )
 
-        val decoded = ExerciseJsonCodec.decode(ExerciseJsonCodec.encode(original))
+        val encoded = ExerciseJsonCodec.encode(original)
+        val decoded = ExerciseJsonCodec.decode(encoded)
 
+        assertTrue(encoded.contains("\"measureMultipliers\": ["))
         assertEquals(original, decoded)
     }
 
@@ -169,6 +189,40 @@ class ExerciseJsonCodecTest {
                 ),
             )
         }
+    }
+
+    @Test
+    fun decodeRejectsNonPositiveMeasureMultiplier() {
+        val exception = assertThrows(InvalidExerciseException::class.java) {
+            ExerciseJsonCodec.decode(
+                validExerciseJson.replace(
+                    "\"ticksPerQuarterNote\": 480,",
+                    """
+                        "ticksPerQuarterNote": 480,
+                        "measureMultipliers": [0],
+                    """.trimIndent(),
+                ),
+            )
+        }
+
+        assertTrue(
+            exception.validationErrors.any { it.contains("measureMultipliers[0]") },
+        )
+    }
+
+    @Test
+    fun encodeRejectsMultiplierCountThatDoesNotMatchPatterns() {
+        val exercise = ExerciseJsonCodec.decode(validExerciseJson).copy(
+            measureMultipliers = emptyList(),
+        )
+
+        val exception = assertThrows(InvalidExerciseException::class.java) {
+            ExerciseJsonCodec.encode(exercise)
+        }
+
+        assertTrue(
+            exception.validationErrors.any { it.contains("one entry per measure pattern") },
+        )
     }
 
     private companion object {

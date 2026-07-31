@@ -5,7 +5,7 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
 import androidx.annotation.WorkerThread
-import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.timing.MonotonicClock
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.LockSupport
@@ -20,7 +20,7 @@ class AudioTrackMetronome(
     @WorkerThread
     @Synchronized
     override fun start(
-        exercise: Exercise,
+        exercise: RuntimeExercise,
         downbeatsOnly: Boolean,
     ): Long {
         stop()
@@ -126,7 +126,7 @@ class AudioTrackMetronome(
 
     @WorkerThread
     @Synchronized
-    override fun startResumeCountIn(exercise: Exercise): Long {
+    override fun startResumeCountIn(exercise: RuntimeExercise): Long {
         val playback = checkNotNull(activePlayback) {
             "Cannot start a resume count-in without active playback."
         }

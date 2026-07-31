@@ -6,11 +6,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
-import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.EditableExercise
 import com.titaniumharmonics.bad.exercise.ExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExpectedNote
 import com.titaniumharmonics.bad.exercise.MeasureSubdivision
+import com.titaniumharmonics.bad.exercise.MeasurePatternConstraints
 import com.titaniumharmonics.bad.exercise.TimeSignature
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +28,7 @@ class ExerciseEditorViewModel(
     private val mutableUiState = MutableStateFlow(ExerciseEditorUiState())
     val uiState: StateFlow<ExerciseEditorUiState> = mutableUiState.asStateFlow()
 
-    private var sourceExercise: Exercise? = null
+    private var sourceExercise: EditableExercise? = null
     private var documentJob: Job? = null
 
     fun createExercise() {
@@ -69,7 +70,7 @@ class ExerciseEditorViewModel(
     }
 
     internal fun applyLoadedExercise(
-        exercise: Exercise,
+        exercise: EditableExercise,
         documentUri: String,
     ) {
         sourceExercise = exercise
@@ -82,11 +83,12 @@ class ExerciseEditorViewModel(
                     editedMeasureIndex = index,
                     originalMeasureIndex = index,
                     subdivision = exercise.measureSubdivisions[index],
+                    multiplier = exercise.measureMultipliers[index],
                     ticksPerQuarterNote = exercise.ticksPerQuarterNote,
                     timeSignature = exercise.timeSignature,
                     notes = exercise.editorNotesForMeasure(index),
                 )
-            },
+            }.withExpandedMeasureRanges(),
             sourceDocumentUri = documentUri,
         )
     }
@@ -102,25 +104,59 @@ class ExerciseEditorViewModel(
 
     fun addMeasure() {
         val state = mutableUiState.value
-        val nextMeasureId = (state.measures.lastOrNull()?.id ?: 0) + 1
+        val nextMeasureId = state.measures.nextMeasureId()
         val ticksPerQuarterNote =
             sourceExercise?.ticksPerQuarterNote ?: DEFAULT_TICKS_PER_QUARTER_NOTE
         val timeSignature =
             sourceExercise?.timeSignature ?: EditorRhythmGrid.DEFAULT_TIME_SIGNATURE
         val subdivision = MeasureSubdivision.QUARTER
         mutableUiState.value = state.copy(
-            measures = state.measures + EditorRhythmGrid.buildMeasure(
-                id = nextMeasureId,
-                editedMeasureIndex = state.measures.size,
-                subdivision = subdivision,
-                ticksPerQuarterNote = ticksPerQuarterNote,
-                timeSignature = timeSignature,
-                notes = EditorRhythmGrid.fullyEnabledNotes(
+            measures = (
+                state.measures + EditorRhythmGrid.buildMeasure(
+                    id = nextMeasureId,
+                    editedMeasureIndex = state.measures.size,
                     subdivision = subdivision,
                     ticksPerQuarterNote = ticksPerQuarterNote,
                     timeSignature = timeSignature,
-                ),
-            ),
+                    notes = EditorRhythmGrid.fullyEnabledNotes(
+                        subdivision = subdivision,
+                        ticksPerQuarterNote = ticksPerQuarterNote,
+                        timeSignature = timeSignature,
+                    ),
+                )
+            ).withExpandedMeasureRanges(),
+            message = null,
+            errorMessage = null,
+        )
+    }
+
+    fun increaseMeasureMultiplier(measureId: Int) {
+        updateMeasureMultiplier(measureId, change = 1)
+    }
+
+    fun decreaseMeasureMultiplier(measureId: Int) {
+        updateMeasureMultiplier(measureId, change = -1)
+    }
+
+    private fun updateMeasureMultiplier(
+        measureId: Int,
+        change: Int,
+    ) {
+        val state = mutableUiState.value
+        if (state.measures.none { it.id == measureId }) return
+        mutableUiState.value = state.copy(
+            measures = state.measures.map { measure ->
+                if (measure.id == measureId) {
+                    measure.copy(
+                        multiplier = (measure.multiplier + change).coerceIn(
+                            MeasurePatternConstraints.MIN_MULTIPLIER,
+                            MeasurePatternConstraints.MAX_MULTIPLIER,
+                        ),
+                    )
+                } else {
+                    measure
+                }
+            }.withExpandedMeasureRanges(),
             message = null,
             errorMessage = null,
         )
@@ -199,7 +235,10 @@ class ExerciseEditorViewModel(
         )
     }
 
-    fun saveExercise(destinationDocumentUri: String? = null) {
+    fun saveExercise(
+        destinationDocumentUri: String? = null,
+        playAfterSave: Boolean = false,
+    ) {
         if (documentJob?.isActive == true) return
         val state = mutableUiState.value
         val documentUri = destinationDocumentUri ?: state.sourceDocumentUri
@@ -220,6 +259,7 @@ class ExerciseEditorViewModel(
 
         mutableUiState.value = state.copy(
             isSaving = true,
+            documentUriReadyToPlay = null,
             message = null,
             errorMessage = null,
         )
@@ -238,6 +278,7 @@ class ExerciseEditorViewModel(
                     measures = rebasedMeasures,
                     sourceDocumentUri = documentUri,
                     isSaving = false,
+                    documentUriReadyToPlay = documentUri.takeIf { playAfterSave },
                     message = "Exercise saved.",
                 )
             } catch (exception: CancellationException) {
@@ -251,7 +292,82 @@ class ExerciseEditorViewModel(
         }
     }
 
-    internal fun buildEditedExercise(state: ExerciseEditorUiState = uiState.value): Exercise {
+    fun consumePlayRequest() {
+        mutableUiState.value = mutableUiState.value.copy(
+            documentUriReadyToPlay = null,
+        )
+    }
+
+    fun duplicateMeasurePattern(measureId: Int) {
+        val state = mutableUiState.value
+        val sourceIndex = state.measures.indexOfFirst { it.id == measureId }
+        if (sourceIndex < 0) return
+
+        val source = state.measures[sourceIndex]
+        val duplicate = source.copy(
+            id = state.measures.nextMeasureId(),
+            originalMeasureIndex = null,
+            notes = source.notes.toList(),
+            slots = emptyList(),
+        )
+        val updatedMeasures = state.measures.toMutableList().apply {
+            add(sourceIndex + 1, duplicate)
+        }
+        updateMeasurePatterns(state, updatedMeasures)
+    }
+
+    fun clearMeasurePattern(measureId: Int) {
+        val state = mutableUiState.value
+        if (state.measures.none { it.id == measureId }) return
+        val updatedMeasures = state.measures.map { measure ->
+            if (measure.id == measureId) {
+                measure.copy(notes = emptyList())
+            } else {
+                measure
+            }
+        }
+        updateMeasurePatterns(state, updatedMeasures)
+    }
+
+    fun moveMeasurePatternUp(measureId: Int) {
+        moveMeasurePattern(measureId, indexChange = -1)
+    }
+
+    fun moveMeasurePatternDown(measureId: Int) {
+        moveMeasurePattern(measureId, indexChange = 1)
+    }
+
+    private fun moveMeasurePattern(
+        measureId: Int,
+        indexChange: Int,
+    ) {
+        val state = mutableUiState.value
+        val sourceIndex = state.measures.indexOfFirst { it.id == measureId }
+        if (sourceIndex < 0) return
+        val destinationIndex = sourceIndex + indexChange
+        if (destinationIndex !in state.measures.indices) return
+
+        val updatedMeasures = state.measures.toMutableList().apply {
+            val movedPattern = removeAt(sourceIndex)
+            add(destinationIndex, movedPattern)
+        }
+        updateMeasurePatterns(state, updatedMeasures)
+    }
+
+    private fun updateMeasurePatterns(
+        state: ExerciseEditorUiState,
+        measures: List<EditorMeasureUiState>,
+    ) {
+        mutableUiState.value = state.copy(
+            measures = measures.rebuildGrid(sourceExercise),
+            message = null,
+            errorMessage = null,
+        )
+    }
+
+    internal fun buildEditedExercise(
+        state: ExerciseEditorUiState = uiState.value,
+    ): EditableExercise {
         require(state.exerciseName.isNotBlank()) {
             "Exercise name must not be blank."
         }
@@ -274,8 +390,11 @@ class ExerciseEditorViewModel(
                 measureSubdivisions = state.measures.map(
                     EditorMeasureUiState::subdivision,
                 ),
+                measureMultipliers = state.measures.map(
+                    EditorMeasureUiState::multiplier,
+                ),
             )
-        } ?: Exercise(
+        } ?: EditableExercise(
             formatVersion = ExerciseFormat.CURRENT_VERSION,
             id = state.exerciseName.toExerciseId(),
             name = state.exerciseName.trim(),
@@ -290,6 +409,9 @@ class ExerciseEditorViewModel(
             ),
             measureSubdivisions = state.measures.map(
                 EditorMeasureUiState::subdivision,
+            ),
+            measureMultipliers = state.measures.map(
+                EditorMeasureUiState::multiplier,
             ),
         )
     }
@@ -334,7 +456,7 @@ private fun String.toExerciseId(): String {
     return normalized.ifBlank { "untitled-exercise" }
 }
 
-private fun Exercise.editorNotesForMeasure(
+private fun EditableExercise.editorNotesForMeasure(
     measureIndex: Int,
 ): List<EditorNoteUiState> {
     val ticksPerMeasure = ticksPerMeasure()
@@ -351,7 +473,7 @@ private fun Exercise.editorNotesForMeasure(
         }
 }
 
-private fun Exercise.ticksPerMeasure(): Long =
+private fun EditableExercise.ticksPerMeasure(): Long =
     ticksPerQuarterNote.toLong() *
         timeSignature.numerator *
         4L /
@@ -371,19 +493,23 @@ private fun List<EditorMeasureUiState>.toExpectedNotes(
 }
 
 private fun List<EditorMeasureUiState>.rebuildGrid(
-    sourceExercise: Exercise?,
+    sourceExercise: EditableExercise?,
 ): List<EditorMeasureUiState> = mapIndexed { editedIndex, measure ->
     EditorRhythmGrid.buildMeasure(
         id = measure.id,
         editedMeasureIndex = editedIndex,
         originalMeasureIndex = measure.originalMeasureIndex,
         subdivision = measure.subdivision,
+        multiplier = measure.multiplier,
         ticksPerQuarterNote = sourceExercise?.ticksPerQuarterNote
             ?: EditorRhythmGrid.DEFAULT_TICKS_PER_QUARTER_NOTE,
         timeSignature = sourceExercise?.timeSignature
             ?: EditorRhythmGrid.DEFAULT_TIME_SIGNATURE,
         notes = measure.notes,
     )
-}
+}.withExpandedMeasureRanges()
+
+private fun List<EditorMeasureUiState>.nextMeasureId(): Int =
+    (maxOfOrNull(EditorMeasureUiState::id) ?: 0) + 1
 
 private const val DEFAULT_TICKS_PER_MEASURE = 1_920L

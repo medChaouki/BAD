@@ -1,7 +1,9 @@
 package com.titaniumharmonics.bad.ui
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppUiStateTest {
@@ -20,6 +22,7 @@ class AppUiStateTest {
             "content://exercise/practice",
             selectedState.practiceDocumentUriToLoad,
         )
+        assertFalse(selectedState.startPracticeAfterLoad)
         assertNull(selectedState.editorDocumentUri)
     }
 
@@ -43,5 +46,25 @@ class AppUiStateTest {
             selectedState.editorReturnDestination,
         )
         assertNull(selectedState.practiceDocumentUriToLoad)
+    }
+
+    @Test
+    fun playingSavedEditorExercise_returnsToPracticeAndRequestsAutoStart() {
+        val editorState = AppUiState(
+            destination = AppDestination.EXERCISE_EDITOR,
+            editorDocumentUri = "content://exercise/editor",
+        )
+
+        val practiceState = editorState.playEditorExercise(
+            "content://exercise/saved",
+        )
+
+        assertEquals(AppDestination.PRACTICE, practiceState.destination)
+        assertEquals(
+            "content://exercise/saved",
+            practiceState.practiceDocumentUriToLoad,
+        )
+        assertTrue(practiceState.startPracticeAfterLoad)
+        assertNull(practiceState.editorDocumentUri)
     }
 }

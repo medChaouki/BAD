@@ -1,7 +1,7 @@
 package com.titaniumharmonics.bad.exercise
 
 object ExerciseValidator {
-    fun validate(exercise: Exercise): List<String> = buildList {
+    fun validate(exercise: EditableExercise): List<String> = buildList {
         if (exercise.formatVersion != ExerciseFormat.CURRENT_VERSION) {
             add(
                 "Unsupported formatVersion ${exercise.formatVersion}; " +
@@ -30,6 +30,25 @@ object ExerciseValidator {
                 "measureSubdivisions must contain exactly one entry per measure " +
                     "(${exercise.measureCount} expected).",
             )
+        }
+        if (exercise.measureMultipliers.size != exercise.measureCount) {
+            add(
+                "measureMultipliers must contain exactly one entry per measure pattern " +
+                    "(${exercise.measureCount} expected).",
+            )
+        }
+        exercise.measureMultipliers.forEachIndexed { index, multiplier ->
+            if (
+                multiplier !in
+                MeasurePatternConstraints.MIN_MULTIPLIER..
+                    MeasurePatternConstraints.MAX_MULTIPLIER
+            ) {
+                add(
+                    "measureMultipliers[$index] must be between " +
+                        "${MeasurePatternConstraints.MIN_MULTIPLIER} and " +
+                        "${MeasurePatternConstraints.MAX_MULTIPLIER}.",
+                )
+            }
         }
         if (exercise.ticksPerQuarterNote <= 0) {
             add("ticksPerQuarterNote must be greater than zero.")
@@ -63,7 +82,7 @@ object ExerciseValidator {
         }
     }
 
-    private fun Exercise.calculateDurationTicks(): DurationCalculation {
+    private fun EditableExercise.calculateDurationTicks(): DurationCalculation {
         if (
             ticksPerQuarterNote <= 0 ||
             measureCount <= 0 ||

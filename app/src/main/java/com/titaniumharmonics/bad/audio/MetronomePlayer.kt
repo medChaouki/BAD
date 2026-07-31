@@ -1,16 +1,16 @@
 package com.titaniumharmonics.bad.audio
 
-import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.RuntimeExercise
 
 interface MetronomePlayer {
     fun start(
-        exercise: Exercise,
+        exercise: RuntimeExercise,
         downbeatsOnly: Boolean,
     ): Long
 
     fun pause()
 
-    fun startResumeCountIn(exercise: Exercise): Long
+    fun startResumeCountIn(exercise: RuntimeExercise): Long
 
     fun resume()
 

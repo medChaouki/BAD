@@ -13,17 +13,17 @@ object ExerciseJsonCodec {
         prettyPrint = true
     }
 
-    fun decode(jsonText: String): Exercise =
+    fun decode(jsonText: String): EditableExercise =
         json.decodeFromString<ExerciseDto>(jsonText)
             .toDomain()
             .also(::requireValid)
 
-    fun encode(exercise: Exercise): String {
+    fun encode(exercise: EditableExercise): String {
         requireValid(exercise)
         return json.encodeToString(ExerciseDto.fromDomain(exercise))
     }
 
-    private fun requireValid(exercise: Exercise) {
+    private fun requireValid(exercise: EditableExercise) {
         val validationErrors = ExerciseValidator.validate(exercise)
         if (validationErrors.isNotEmpty()) {
             throw InvalidExerciseException(validationErrors)
@@ -45,15 +45,16 @@ private data class ExerciseDto(
     val ticksPerQuarterNote: Int,
     val notes: List<ExpectedNoteDto>,
     val measureSubdivisions: List<MeasureSubdivisionDto>? = null,
+    val measureMultipliers: List<Int>? = null,
 ) {
-    fun toDomain(): Exercise {
+    fun toDomain(): EditableExercise {
         if (fileType != ExerciseFormat.FILE_TYPE) {
             throw InvalidExerciseFileException(
                 "Not a B.A.D. exercise file: fileType must be " +
                     "\"${ExerciseFormat.FILE_TYPE}\".",
             )
         }
-        return Exercise(
+        return EditableExercise(
             formatVersion = formatVersion,
             id = id,
             name = name,
@@ -69,11 +70,15 @@ private data class ExerciseDto(
                 ?: List(measureCount.coerceAtLeast(0)) {
                     MeasureSubdivision.QUARTER
                 },
+            measureMultipliers = measureMultipliers
+                ?: List(measureCount.coerceAtLeast(0)) {
+                    MeasurePatternConstraints.DEFAULT_MULTIPLIER
+                },
         )
     }
 
     companion object {
-        fun fromDomain(exercise: Exercise): ExerciseDto = ExerciseDto(
+        fun fromDomain(exercise: EditableExercise): ExerciseDto = ExerciseDto(
             fileType = ExerciseFormat.FILE_TYPE,
             formatVersion = exercise.formatVersion,
             id = exercise.id,
@@ -88,6 +93,7 @@ private data class ExerciseDto(
             measureSubdivisions = exercise.measureSubdivisions.map(
                 MeasureSubdivisionDto::fromDomain,
             ),
+            measureMultipliers = exercise.measureMultipliers,
         )
     }
 }

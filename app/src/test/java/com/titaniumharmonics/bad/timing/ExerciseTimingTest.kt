@@ -1,15 +1,16 @@
 package com.titaniumharmonics.bad.timing
 
-import com.titaniumharmonics.bad.exercise.Exercise
+import com.titaniumharmonics.bad.exercise.EditableExercise
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExpectedNote
 import com.titaniumharmonics.bad.exercise.MeasureSubdivision
 import com.titaniumharmonics.bad.exercise.TimeSignature
+import com.titaniumharmonics.bad.exercise.compileForTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ExerciseTimingTest {
-    private val exercise = Exercise(
+    private val editableExercise = EditableExercise(
         formatVersion = ExerciseFormat.CURRENT_VERSION,
         id = "timing-test",
         name = "Timing test",
@@ -21,6 +22,7 @@ class ExerciseTimingTest {
         ticksPerQuarterNote = 480,
         notes = listOf(ExpectedNote(positionTicks = 0)),
     )
+    private val exercise = editableExercise.compileForTest()
 
     @Test
     fun ticksToNanos_convertsOneQuarterNoteAt100Bpm() {
@@ -61,16 +63,33 @@ class ExerciseTimingTest {
     @Test
     fun measureNumberAt_tracksPlaybackProgressAndClampsAtLastMeasure() {
         val fourMeasureTiming = ExerciseTiming(
-            exercise.copy(
+            editableExercise.copy(
                 measureCount = 4,
                 measureSubdivisions = List(4) { MeasureSubdivision.QUARTER },
-            ),
+                measureMultipliers = List(4) { 1 },
+            ).compileForTest(),
         )
 
         assertEquals(1, fourMeasureTiming.measureNumberAt(0L))
         assertEquals(1, fourMeasureTiming.measureNumberAt(2_399_999_999L))
         assertEquals(2, fourMeasureTiming.measureNumberAt(2_400_000_000L))
         assertEquals(4, fourMeasureTiming.measureNumberAt(9_600_000_000L))
+    }
+
+    @Test
+    fun expandedPatterns_controlDurationAndMeasureProgress() {
+        val expandedExercise = editableExercise.copy(
+            measureMultipliers = listOf(4),
+        ).compileForTest()
+        val timing = ExerciseTiming(expandedExercise)
+
+        assertEquals(4, expandedExercise.measureCount)
+        assertEquals(7_680L, expandedExercise.totalTicks)
+        assertEquals(9_600_000_000L, timing.exerciseDurationNanos)
+        assertEquals(1, timing.measureNumberAt(0L))
+        assertEquals(2, timing.measureNumberAt(2_400_000_000L))
+        assertEquals(3, timing.measureNumberAt(4_800_000_000L))
+        assertEquals(4, timing.measureNumberAt(7_200_000_000L))
     }
 
     @Test
