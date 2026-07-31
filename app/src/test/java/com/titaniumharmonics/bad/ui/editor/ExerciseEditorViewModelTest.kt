@@ -3,11 +3,16 @@ package com.titaniumharmonics.bad.ui.editor
 import com.titaniumharmonics.bad.exercise.EditableExercise
 import com.titaniumharmonics.bad.exercise.ExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
+import com.titaniumharmonics.bad.exercise.ExerciseJsonCodec
 import com.titaniumharmonics.bad.exercise.ExpectedNote
 import com.titaniumharmonics.bad.exercise.MeasureSubdivision
 import com.titaniumharmonics.bad.exercise.MeasurePatternConstraints
+import com.titaniumharmonics.bad.exercise.RuntimeExpectedNote
 import com.titaniumharmonics.bad.exercise.TimeSignature
+import com.titaniumharmonics.bad.exercise.compileForTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Test
 
 class ExerciseEditorViewModelTest {
@@ -322,6 +327,178 @@ class ExerciseEditorViewModelTest {
         )
         assertEquals(2, edited.measureSubdivisions.size)
     }
+
+    @Test
+    fun duplicatePattern_insertsIndependentCopyImmediatelyAfterSource() {
+        val viewModel = loadedPatternViewModel()
+        val source = viewModel.uiState.value.measures.first()
+
+        viewModel.duplicateMeasurePattern(source.id)
+
+        val measures = viewModel.uiState.value.measures
+        val duplicate = measures[1]
+        assertEquals(listOf(1, 4, 2, 3), measures.map(EditorMeasureUiState::id))
+        assertNotEquals(source.id, duplicate.id)
+        assertEquals(source.subdivision, duplicate.subdivision)
+        assertEquals(source.multiplier, duplicate.multiplier)
+        assertEquals(source.notes, duplicate.notes)
+        assertNotSame(source.notes, duplicate.notes)
+        assertEquals(1, duplicate.unmappedNoteCount)
+
+        viewModel.toggleMeasureNote(
+            measureId = duplicate.id,
+            positionWithinMeasureTicks = 160L,
+        )
+
+        val updatedMeasures = viewModel.uiState.value.measures
+        assertEquals(
+            listOf(0L, 100L, 160L),
+            updatedMeasures[0].notes.map(EditorNoteUiState::positionWithinMeasureTicks),
+        )
+        assertEquals(
+            listOf(0L, 100L),
+            updatedMeasures[1].notes.map(EditorNoteUiState::positionWithinMeasureTicks),
+        )
+    }
+
+    @Test
+    fun duplicatePattern_recalculatesExpandedCountAndFollowingRanges() {
+        val viewModel = loadedPatternViewModel()
+
+        viewModel.duplicateMeasurePattern(measureId = 1)
+
+        val state = viewModel.uiState.value
+        assertEquals(9, state.totalExpandedMeasureCount)
+        assertEquals(
+            listOf(1, 4, 7, 9),
+            state.measures.map(EditorMeasureUiState::expandedStartMeasureNumber),
+        )
+        assertEquals(
+            listOf(3, 6, 8, 9),
+            state.measures.map(EditorMeasureUiState::expandedEndMeasureNumber),
+        )
+    }
+
+    @Test
+    fun clearPattern_removesMappedAndOutOfGridNotesButPreservesPatternSettings() {
+        val viewModel = loadedPatternViewModel()
+        val original = viewModel.uiState.value.measures.first()
+
+        viewModel.clearMeasurePattern(original.id)
+
+        val cleared = viewModel.uiState.value.measures.first()
+        assertEquals(emptyList<EditorNoteUiState>(), cleared.notes)
+        assertEquals(0, cleared.unmappedNoteCount)
+        assertEquals(0, cleared.slots.count(EditorRhythmSlotUiState::hasNote))
+        assertEquals(original.subdivision, cleared.subdivision)
+        assertEquals(original.multiplier, cleared.multiplier)
+        assertEquals(original.id, cleared.id)
+    }
+
+    @Test
+    fun movePatternUpAndDown_preservesIdentityContentAndRecalculatesRanges() {
+        val viewModel = loadedPatternViewModel()
+        val originalById = viewModel.uiState.value.measures.associateBy { it.id }
+
+        viewModel.moveMeasurePatternUp(measureId = 2)
+
+        var measures = viewModel.uiState.value.measures
+        assertEquals(listOf(2, 1, 3), measures.map(EditorMeasureUiState::id))
+        assertEquals(listOf(1, 3, 6), measures.map { it.expandedStartMeasureNumber })
+        assertEquals(originalById.getValue(2).notes, measures[0].notes)
+        assertEquals(originalById.getValue(2).subdivision, measures[0].subdivision)
+        assertEquals(originalById.getValue(2).multiplier, measures[0].multiplier)
+
+        viewModel.moveMeasurePatternDown(measureId = 2)
+
+        measures = viewModel.uiState.value.measures
+        assertEquals(listOf(1, 2, 3), measures.map(EditorMeasureUiState::id))
+        assertEquals(listOf(1, 4, 6), measures.map { it.expandedStartMeasureNumber })
+    }
+
+    @Test
+    fun movePattern_doesNothingBeyondFirstOrLastPosition() {
+        val viewModel = loadedPatternViewModel()
+        val originalIds = viewModel.uiState.value.measures.map(EditorMeasureUiState::id)
+
+        viewModel.moveMeasurePatternUp(measureId = originalIds.first())
+        viewModel.moveMeasurePatternDown(measureId = originalIds.last())
+
+        assertEquals(
+            originalIds,
+            viewModel.uiState.value.measures.map(EditorMeasureUiState::id),
+        )
+    }
+
+    @Test
+    fun reorderedPatterns_arePreservedByJsonAndRuntimeCompilation() {
+        val viewModel = loadedPatternViewModel()
+        viewModel.moveMeasurePatternUp(measureId = 3)
+        viewModel.moveMeasurePatternUp(measureId = 3)
+
+        val edited = viewModel.buildEditedExercise()
+        val reopened = ExerciseJsonCodec.decode(ExerciseJsonCodec.encode(edited))
+        val runtime = reopened.compileForTest()
+
+        assertEquals(
+            listOf(
+                MeasureSubdivision.SIXTEENTH,
+                MeasureSubdivision.EIGHTH_TRIPLET,
+                MeasureSubdivision.EIGHTH,
+            ),
+            reopened.measureSubdivisions,
+        )
+        assertEquals(listOf(1, 3, 2), reopened.measureMultipliers)
+        assertEquals(
+            listOf(120L, 1_920L, 2_020L, 2_080L, 3_840L, 3_940L, 4_000L),
+            runtime.notes.take(7).map(RuntimeExpectedNote::positionTicks),
+        )
+        assertEquals(6, runtime.measureCount)
+    }
+
+    @Test
+    fun addingAfterReorder_usesANewStablePatternId() {
+        val viewModel = loadedPatternViewModel()
+        viewModel.moveMeasurePatternUp(measureId = 3)
+
+        viewModel.addMeasure()
+
+        assertEquals(
+            listOf(1, 3, 2, 4),
+            viewModel.uiState.value.measures.map(EditorMeasureUiState::id),
+        )
+    }
+
+    private fun loadedPatternViewModel(): ExerciseEditorViewModel =
+        ExerciseEditorViewModel(FakeExerciseDocumentStore()).also { viewModel ->
+            viewModel.applyLoadedExercise(
+                exercise = EditableExercise(
+                    formatVersion = ExerciseFormat.CURRENT_VERSION,
+                    id = "pattern-actions",
+                    name = "Pattern actions",
+                    description = "",
+                    tempoBpm = 100.0,
+                    timeSignature = TimeSignature(4, 4),
+                    countInMeasures = 1,
+                    measureCount = 3,
+                    ticksPerQuarterNote = 480,
+                    notes = listOf(
+                        ExpectedNote(positionTicks = 0L),
+                        ExpectedNote(positionTicks = 100L),
+                        ExpectedNote(positionTicks = 160L),
+                        ExpectedNote(positionTicks = 1_920L + 240L),
+                        ExpectedNote(positionTicks = 3_840L + 120L),
+                    ),
+                    measureSubdivisions = listOf(
+                        MeasureSubdivision.EIGHTH_TRIPLET,
+                        MeasureSubdivision.EIGHTH,
+                        MeasureSubdivision.SIXTEENTH,
+                    ),
+                    measureMultipliers = listOf(3, 2, 1),
+                ),
+                documentUri = "content://exercise/pattern-actions",
+            )
+        }
 
     private class FakeExerciseDocumentStore : ExerciseDocumentStore {
         override fun read(documentUri: String): EditableExercise =

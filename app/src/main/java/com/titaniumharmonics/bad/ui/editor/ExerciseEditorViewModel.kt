@@ -104,7 +104,7 @@ class ExerciseEditorViewModel(
 
     fun addMeasure() {
         val state = mutableUiState.value
-        val nextMeasureId = (state.measures.lastOrNull()?.id ?: 0) + 1
+        val nextMeasureId = state.measures.nextMeasureId()
         val ticksPerQuarterNote =
             sourceExercise?.ticksPerQuarterNote ?: DEFAULT_TICKS_PER_QUARTER_NOTE
         val timeSignature =
@@ -298,6 +298,73 @@ class ExerciseEditorViewModel(
         )
     }
 
+    fun duplicateMeasurePattern(measureId: Int) {
+        val state = mutableUiState.value
+        val sourceIndex = state.measures.indexOfFirst { it.id == measureId }
+        if (sourceIndex < 0) return
+
+        val source = state.measures[sourceIndex]
+        val duplicate = source.copy(
+            id = state.measures.nextMeasureId(),
+            originalMeasureIndex = null,
+            notes = source.notes.toList(),
+            slots = emptyList(),
+        )
+        val updatedMeasures = state.measures.toMutableList().apply {
+            add(sourceIndex + 1, duplicate)
+        }
+        updateMeasurePatterns(state, updatedMeasures)
+    }
+
+    fun clearMeasurePattern(measureId: Int) {
+        val state = mutableUiState.value
+        if (state.measures.none { it.id == measureId }) return
+        val updatedMeasures = state.measures.map { measure ->
+            if (measure.id == measureId) {
+                measure.copy(notes = emptyList())
+            } else {
+                measure
+            }
+        }
+        updateMeasurePatterns(state, updatedMeasures)
+    }
+
+    fun moveMeasurePatternUp(measureId: Int) {
+        moveMeasurePattern(measureId, indexChange = -1)
+    }
+
+    fun moveMeasurePatternDown(measureId: Int) {
+        moveMeasurePattern(measureId, indexChange = 1)
+    }
+
+    private fun moveMeasurePattern(
+        measureId: Int,
+        indexChange: Int,
+    ) {
+        val state = mutableUiState.value
+        val sourceIndex = state.measures.indexOfFirst { it.id == measureId }
+        if (sourceIndex < 0) return
+        val destinationIndex = sourceIndex + indexChange
+        if (destinationIndex !in state.measures.indices) return
+
+        val updatedMeasures = state.measures.toMutableList().apply {
+            val movedPattern = removeAt(sourceIndex)
+            add(destinationIndex, movedPattern)
+        }
+        updateMeasurePatterns(state, updatedMeasures)
+    }
+
+    private fun updateMeasurePatterns(
+        state: ExerciseEditorUiState,
+        measures: List<EditorMeasureUiState>,
+    ) {
+        mutableUiState.value = state.copy(
+            measures = measures.rebuildGrid(sourceExercise),
+            message = null,
+            errorMessage = null,
+        )
+    }
+
     internal fun buildEditedExercise(
         state: ExerciseEditorUiState = uiState.value,
     ): EditableExercise {
@@ -441,5 +508,8 @@ private fun List<EditorMeasureUiState>.rebuildGrid(
         notes = measure.notes,
     )
 }.withExpandedMeasureRanges()
+
+private fun List<EditorMeasureUiState>.nextMeasureId(): Int =
+    (maxOfOrNull(EditorMeasureUiState::id) ?: 0) + 1
 
 private const val DEFAULT_TICKS_PER_MEASURE = 1_920L

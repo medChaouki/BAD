@@ -28,6 +28,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -116,6 +118,10 @@ fun ExerciseEditorRoute(
         onTempoBpmChange = viewModel::setTempoBpmText,
         onAddMeasure = viewModel::addMeasure,
         onDeleteMeasure = viewModel::deleteMeasure,
+        onDuplicateMeasure = viewModel::duplicateMeasurePattern,
+        onClearMeasure = viewModel::clearMeasurePattern,
+        onMoveMeasureUp = viewModel::moveMeasurePatternUp,
+        onMoveMeasureDown = viewModel::moveMeasurePatternDown,
         onDecreaseMeasureMultiplier = viewModel::decreaseMeasureMultiplier,
         onIncreaseMeasureMultiplier = viewModel::increaseMeasureMultiplier,
         onMeasureSubdivisionChange = viewModel::setMeasureSubdivision,
@@ -158,6 +164,10 @@ fun ExerciseEditorScreen(
     onTempoBpmChange: (String) -> Unit,
     onAddMeasure: () -> Unit,
     onDeleteMeasure: (Int) -> Unit,
+    onDuplicateMeasure: (Int) -> Unit,
+    onClearMeasure: (Int) -> Unit,
+    onMoveMeasureUp: (Int) -> Unit,
+    onMoveMeasureDown: (Int) -> Unit,
     onDecreaseMeasureMultiplier: (Int) -> Unit,
     onIncreaseMeasureMultiplier: (Int) -> Unit,
     onMeasureSubdivisionChange: (Int, MeasureSubdivision) -> Unit,
@@ -223,6 +233,10 @@ fun ExerciseEditorScreen(
             MeasureList(
                 measures = uiState.measures,
                 onDeleteMeasure = onDeleteMeasure,
+                onDuplicateMeasure = onDuplicateMeasure,
+                onClearMeasure = onClearMeasure,
+                onMoveMeasureUp = onMoveMeasureUp,
+                onMoveMeasureDown = onMoveMeasureDown,
                 onDecreaseMeasureMultiplier = onDecreaseMeasureMultiplier,
                 onIncreaseMeasureMultiplier = onIncreaseMeasureMultiplier,
                 onMeasureSubdivisionChange = onMeasureSubdivisionChange,
@@ -285,6 +299,10 @@ fun ExerciseEditorScreen(
 private fun MeasureList(
     measures: List<EditorMeasureUiState>,
     onDeleteMeasure: (Int) -> Unit,
+    onDuplicateMeasure: (Int) -> Unit,
+    onClearMeasure: (Int) -> Unit,
+    onMoveMeasureUp: (Int) -> Unit,
+    onMoveMeasureDown: (Int) -> Unit,
     onDecreaseMeasureMultiplier: (Int) -> Unit,
     onIncreaseMeasureMultiplier: (Int) -> Unit,
     onMeasureSubdivisionChange: (Int, MeasureSubdivision) -> Unit,
@@ -322,7 +340,13 @@ private fun MeasureList(
                     val measure = measures[index]
                     SwipeToDeleteMeasure(
                         measure = measure,
+                        canMoveUp = index > 0,
+                        canMoveDown = index < measures.lastIndex,
                         onDelete = { onDeleteMeasure(measure.id) },
+                        onDuplicate = { onDuplicateMeasure(measure.id) },
+                        onClear = { onClearMeasure(measure.id) },
+                        onMoveUp = { onMoveMeasureUp(measure.id) },
+                        onMoveDown = { onMoveMeasureDown(measure.id) },
                         onDecreaseMultiplier = {
                             onDecreaseMeasureMultiplier(measure.id)
                         },
@@ -348,7 +372,13 @@ private fun MeasureList(
 @Composable
 private fun SwipeToDeleteMeasure(
     measure: EditorMeasureUiState,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
     onDelete: () -> Unit,
+    onDuplicate: () -> Unit,
+    onClear: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onDecreaseMultiplier: () -> Unit,
     onIncreaseMultiplier: () -> Unit,
     onSubdivisionChange: (MeasureSubdivision) -> Unit,
@@ -394,6 +424,12 @@ private fun SwipeToDeleteMeasure(
 
         MeasureGridCard(
             measure = measure,
+            canMoveUp = canMoveUp,
+            canMoveDown = canMoveDown,
+            onDuplicate = onDuplicate,
+            onClear = onClear,
+            onMoveUp = onMoveUp,
+            onMoveDown = onMoveDown,
             onDecreaseMultiplier = onDecreaseMultiplier,
             onIncreaseMultiplier = onIncreaseMultiplier,
             onSubdivisionChange = onSubdivisionChange,
@@ -425,6 +461,12 @@ private fun SwipeToDeleteMeasure(
 @Composable
 private fun MeasureGridCard(
     measure: EditorMeasureUiState,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onDuplicate: () -> Unit,
+    onClear: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onDecreaseMultiplier: () -> Unit,
     onIncreaseMultiplier: () -> Unit,
     onSubdivisionChange: (MeasureSubdivision) -> Unit,
@@ -456,6 +498,14 @@ private fun MeasureGridCard(
                     onDecrease = onDecreaseMultiplier,
                     onIncrease = onIncreaseMultiplier,
                 )
+                PatternActionsMenu(
+                    canMoveUp = canMoveUp,
+                    canMoveDown = canMoveDown,
+                    onDuplicate = onDuplicate,
+                    onClear = onClear,
+                    onMoveUp = onMoveUp,
+                    onMoveDown = onMoveDown,
+                )
             }
             SubdivisionSelector(
                 selectedSubdivision = measure.subdivision,
@@ -486,6 +536,66 @@ private fun MeasureGridCard(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PatternActionsMenu(
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onDuplicate: () -> Unit,
+    onClear: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        TextButton(
+            onClick = { expanded = true },
+            contentPadding = PaddingValues(0.dp),
+            modifier = Modifier.size(40.dp),
+        ) {
+            Text(
+                text = "⋮",
+                style = MaterialTheme.typography.titleLarge,
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("Duplicate") },
+                onClick = {
+                    expanded = false
+                    onDuplicate()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Clear") },
+                onClick = {
+                    expanded = false
+                    onClear()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Move up") },
+                enabled = canMoveUp,
+                onClick = {
+                    expanded = false
+                    onMoveUp()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Move down") },
+                enabled = canMoveDown,
+                onClick = {
+                    expanded = false
+                    onMoveDown()
+                },
+            )
         }
     }
 }
@@ -660,6 +770,10 @@ private fun ExerciseEditorScreenPreview() {
             onTempoBpmChange = {},
             onAddMeasure = {},
             onDeleteMeasure = {},
+            onDuplicateMeasure = {},
+            onClearMeasure = {},
+            onMoveMeasureUp = {},
+            onMoveMeasureDown = {},
             onDecreaseMeasureMultiplier = {},
             onIncreaseMeasureMultiplier = {},
             onMeasureSubdivisionChange = { _, _ -> },
