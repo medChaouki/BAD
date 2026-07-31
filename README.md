@@ -22,7 +22,7 @@ implemented yet.
 - Exercise validation with explicit error reporting
 - Musical tick-to-time conversion
 - Monotonic practice-session clock
-- Count-in, running, stopped, and completed states
+- Mandatory one-measure count-in, running, stopped, and completed states
 - Generated 48 kHz mono PCM metronome
 - Distinct quarter-note count-in and note-driven exercise clicks
 - Accented first beat of each measure
@@ -37,7 +37,7 @@ implemented yet.
 - Purpose-aware exercise library with tap-to-load or tap-to-edit and
   long-press deletion
 - Home screen sections for creating or modifying exercises and starting practice
-- Collapsible per-exercise playback controls for tempo, count-in, measure
+- Collapsible per-exercise playback controls for tempo, measure
   count, and downbeat-only clicks
 - Lifecycle-aware playback cleanup
 - JVM tests for exercise parsing, validation, timing, and click generation
@@ -66,7 +66,7 @@ app/src/main/assets/exercises/
 
 On Android 10 or newer, the first app launch creates
 `Download/B.A.D/assets/` in shared storage and copies
-`basic-quarter-notes.json` there when that sample is absent. This seeding runs
+`basic-quarter-notes-v2.json` there when that sample is absent. This seeding runs
 only once per installation, so a sample deliberately deleted later is not
 recreated. Existing folders and files are never erased or overwritten. Create
 and the Exercise Library's Browse file pickers open in this directory by
@@ -80,7 +80,7 @@ Example:
 ```json
 {
   "fileType": "bad-exercise",
-  "formatVersion": 1,
+  "formatVersion": 2,
   "id": "basic-quarter-notes",
   "name": "Quarter Note Inspection",
   "description": "Four measures of quarter notes.",
@@ -89,7 +89,6 @@ Example:
     "numerator": 4,
     "denominator": 4
   },
-  "countInMeasures": 1,
   "measureCount": 4,
   "ticksPerQuarterNote": 480,
   "measureSubdivisions": [
@@ -178,7 +177,7 @@ Selecting another subdivision resets that pattern with every new slot enabled;
 tapping a slot then enables or disables its expected note. Notes outside the
 selected grid remain preserved and produce a warning until an explicit
 subdivision reset replaces the pattern. When an existing file is overwritten,
-its identifier, description, time signature, count-in, and timing resolution
+its identifier, description, time signature, and timing resolution
 are preserved. Pattern duration comes from the exercise time signature.
 
 When an exercise is loaded for practice, each compact pattern is expanded in
@@ -198,9 +197,11 @@ and playback starts with the normal startup delay and count-in. A cancelled or
 failed save remains in the editor and does not start playback.
 
 During playback, exercise metronome clicks occur only at exact expected-note
-ticks. Disabled notes and empty measures are silent. Count-in audio always uses
-Quarter notes with a distinct higher-pitched sound, while the timeline and
-visual beat highlights continue independently so musical time stays visible.
+ticks. Disabled notes and empty measures are silent. Every session and resume
+uses exactly one measure of Quarter-note count-in clicks with a distinct
+higher-pitched sound. Count-in is a playback invariant and is therefore not
+stored in exercise JSON. The timeline and visual beat highlights continue
+independently so musical time stays visible.
 
 Swiping a measure to the left reveals a red Delete action. Deletion occurs only
 after that action is pressed. Notes inside a deleted imported measure are
@@ -260,10 +261,10 @@ spacing. The judgement line is hidden in preview mode.
 Starting an inspection opens a dedicated full-screen player containing the
 timeline, current status, and playback controls. Player text adapts to the
 active theme, using white in dark themes and black in light themes. Initial
-playback waits two seconds after opening the player before starting the count-in
-or exercise, giving the device time to prepare the screen and audio path. Pause
-freezes both metronome audio and monotonic timeline progress. When count-in is
-enabled, Resume plays the configured count-in while the timeline remains
+playback waits two seconds after opening the player before starting the
+mandatory one-measure count-in, giving the device time to prepare the screen
+and audio path. Pause freezes both metronome audio and monotonic timeline
+progress. Resume plays one measure of count-in while the timeline remains
 frozen at the paused position, then continues from there. During an initial or
 Repeat count-in, the playback timeline waits at one quarter note before
 exercise time zero. It begins scrolling during the final quarter note of the

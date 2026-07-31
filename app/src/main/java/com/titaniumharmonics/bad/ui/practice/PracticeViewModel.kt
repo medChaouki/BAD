@@ -127,8 +127,7 @@ class PracticeViewModel(
         mutableUiState.value = mutableUiState.value.copy(
             phase = PracticePhase.PREPARING,
             exerciseElapsedNanos = -timing.countInDurationNanos,
-            countInBeatsRemaining = exercise.countInMeasures *
-                exercise.timeSignature.numerator,
+            countInBeatsRemaining = timing.countInQuarterNoteCount,
             errorMessage = null,
         )
 
@@ -225,11 +224,7 @@ class PracticeViewModel(
 
         audioControlJob = viewModelScope.launch {
             try {
-                if (exercise.countInMeasures > 0) {
-                    runResumeCountIn(exercise)
-                } else {
-                    resumePausedPlayback()
-                }
+                runResumeCountIn(exercise)
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
@@ -246,8 +241,7 @@ class PracticeViewModel(
         val timing = ExerciseTiming(exercise)
         mutableUiState.value = mutableUiState.value.copy(
             phase = PracticePhase.RESUME_COUNT_IN,
-            countInBeatsRemaining = exercise.countInMeasures *
-                exercise.timeSignature.numerator,
+            countInBeatsRemaining = timing.countInQuarterNoteCount,
             errorMessage = null,
         )
         val countInStartedNanos = withContext(Dispatchers.IO) {
@@ -334,12 +328,6 @@ class PracticeViewModel(
                 tempoBpm = (settings.tempoBpm + ExercisePlaybackSettings.TEMPO_STEP_BPM)
                     .coerceAtMost(ExercisePlaybackSettings.MAX_TEMPO_BPM),
             )
-        }
-    }
-
-    fun setCountInEnabled(enabled: Boolean) {
-        updatePlaybackSettings { settings ->
-            settings.copy(countInEnabled = enabled)
         }
     }
 

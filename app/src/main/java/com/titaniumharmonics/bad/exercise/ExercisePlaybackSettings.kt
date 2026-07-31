@@ -2,7 +2,6 @@ package com.titaniumharmonics.bad.exercise
 
 data class ExercisePlaybackSettings(
     val tempoBpm: Int,
-    val countInEnabled: Boolean,
     val measureCount: Int,
     val downbeatsOnly: Boolean = false,
     val maximumMeasureCount: Int = DEFAULT_MAX_MEASURE_COUNT,
@@ -50,7 +49,6 @@ data class ExercisePlaybackSettings(
             description = exercise.description,
             tempoBpm = tempoBpm.toDouble(),
             timeSignature = exercise.timeSignature,
-            countInMeasures = if (countInEnabled) exercise.countInMeasures else 0,
             ticksPerQuarterNote = exercise.ticksPerQuarterNote,
             measures = runtimeMeasures,
         )
@@ -67,7 +65,6 @@ data class ExercisePlaybackSettings(
             ExercisePlaybackSettings(
                 tempoBpm = exercise.tempoBpm.toInt()
                     .coerceIn(MIN_TEMPO_BPM, MAX_TEMPO_BPM),
-                countInEnabled = exercise.countInMeasures > 0,
                 measureCount = exercise.measureCount,
                 downbeatsOnly = false,
                 maximumMeasureCount = maxOf(

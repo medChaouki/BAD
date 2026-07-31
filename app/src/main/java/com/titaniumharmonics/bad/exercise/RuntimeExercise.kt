@@ -8,7 +8,6 @@ class RuntimeExercise(
     val description: String,
     val tempoBpm: Double,
     val timeSignature: TimeSignature,
-    val countInMeasures: Int,
     val ticksPerQuarterNote: Int,
     measures: List<RuntimeMeasure>,
 ) {
@@ -30,7 +29,6 @@ class RuntimeExercise(
             description == other.description &&
             tempoBpm == other.tempoBpm &&
             timeSignature == other.timeSignature &&
-            countInMeasures == other.countInMeasures &&
             ticksPerQuarterNote == other.ticksPerQuarterNote &&
             measures == other.measures
 
@@ -40,7 +38,6 @@ class RuntimeExercise(
         result = 31 * result + description.hashCode()
         result = 31 * result + tempoBpm.hashCode()
         result = 31 * result + timeSignature.hashCode()
-        result = 31 * result + countInMeasures
         result = 31 * result + ticksPerQuarterNote
         result = 31 * result + measures.hashCode()
         return result

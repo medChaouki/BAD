@@ -7,7 +7,6 @@ data class EditableExercise(
     val description: String,
     val tempoBpm: Double,
     val timeSignature: TimeSignature,
-    val countInMeasures: Int,
     val measureCount: Int,
     val ticksPerQuarterNote: Int,
     val notes: List<ExpectedNote>,

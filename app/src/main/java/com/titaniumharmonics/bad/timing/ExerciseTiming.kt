@@ -27,10 +27,12 @@ class ExerciseTiming(
 
     val countInDurationNanos: Long =
         durationToNanos(
-            quarterNotes = exercise.countInMeasures.toDouble() *
-                exercise.timeSignature.numerator *
+            quarterNotes = exercise.timeSignature.numerator *
                 4.0 / exercise.timeSignature.denominator,
         )
+
+    val countInQuarterNoteCount: Int =
+        (measureDurationTicks / exercise.ticksPerQuarterNote).toInt()
 
     val exerciseDurationNanos: Long =
         durationToNanos(

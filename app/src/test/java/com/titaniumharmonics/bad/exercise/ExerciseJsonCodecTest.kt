@@ -8,7 +8,7 @@ import org.junit.Test
 
 class ExerciseJsonCodecTest {
     @Test
-    fun decode_readsVersionOneExercise() {
+    fun decode_readsVersionTwoExerciseWithoutConfigurableCountIn() {
         val exercise = ExerciseJsonCodec.decode(validExerciseJson)
 
         assertEquals(ExerciseFormat.CURRENT_VERSION, exercise.formatVersion)
@@ -109,7 +109,7 @@ class ExerciseJsonCodecTest {
     @Test
     fun decode_rejectsUnsupportedFormatVersion() {
         val exception = assertThrows(InvalidExerciseException::class.java) {
-            ExerciseJsonCodec.decode(validExerciseJson.replace("\"formatVersion\": 1", "\"formatVersion\": 2"))
+            ExerciseJsonCodec.decode(validExerciseJson.replace("\"formatVersion\": 2", "\"formatVersion\": 1"))
         }
 
         assertTrue(exception.validationErrors.single().contains("Unsupported formatVersion"))
@@ -211,6 +211,18 @@ class ExerciseJsonCodecTest {
     }
 
     @Test
+    fun decodeRejectsLegacyConfigurableCountInField() {
+        assertThrows(SerializationException::class.java) {
+            ExerciseJsonCodec.decode(
+                validExerciseJson.replace(
+                    "\"measureCount\": 1,",
+                    "\"countInMeasures\": 1,\n    \"measureCount\": 1,",
+                ),
+            )
+        }
+    }
+
+    @Test
     fun encodeRejectsMultiplierCountThatDoesNotMatchPatterns() {
         val exercise = ExerciseJsonCodec.decode(validExerciseJson).copy(
             measureMultipliers = emptyList(),
@@ -229,7 +241,7 @@ class ExerciseJsonCodecTest {
         val validExerciseJson = """
             {
                 "fileType": "bad-exercise",
-                "formatVersion": 1,
+                "formatVersion": 2,
                 "id": "basic-quarter-notes",
                 "name": "Quarter Note Inspection",
                 "description": "One measure of quarter notes.",
@@ -238,7 +250,6 @@ class ExerciseJsonCodecTest {
                     "numerator": 4,
                     "denominator": 4
                 },
-                "countInMeasures": 1,
                 "measureCount": 1,
                 "ticksPerQuarterNote": 480,
                 "notes": [

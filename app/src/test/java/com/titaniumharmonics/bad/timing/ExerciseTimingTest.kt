@@ -17,7 +17,6 @@ class ExerciseTimingTest {
         description = "",
         tempoBpm = 100.0,
         timeSignature = TimeSignature(numerator = 4, denominator = 4),
-        countInMeasures = 1,
         measureCount = 1,
         ticksPerQuarterNote = 480,
         notes = listOf(ExpectedNote(positionTicks = 0)),
@@ -38,6 +37,7 @@ class ExerciseTimingTest {
         assertEquals(600_000_000L, timing.beatDurationNanos)
         assertEquals(600_000_000L, timing.quarterNoteDurationNanos)
         assertEquals(1_920L, timing.measureDurationTicks)
+        assertEquals(4, timing.countInQuarterNoteCount)
         assertEquals(150_000_000L, timing.beatHighlightDurationNanos)
         assertEquals(2_400_000_000L, timing.countInDurationNanos)
         assertEquals(2_400_000_000L, timing.exerciseDurationNanos)

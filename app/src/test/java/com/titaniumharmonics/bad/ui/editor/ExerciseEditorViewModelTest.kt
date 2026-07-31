@@ -168,7 +168,6 @@ class ExerciseEditorViewModelTest {
             description = "",
             tempoBpm = 100.0,
             timeSignature = TimeSignature(4, 4),
-            countInMeasures = 1,
             measureCount = 2,
             ticksPerQuarterNote = 480,
             notes = emptyList(),
@@ -203,7 +202,6 @@ class ExerciseEditorViewModelTest {
             description = "",
             tempoBpm = 100.0,
             timeSignature = TimeSignature(4, 4),
-            countInMeasures = 1,
             measureCount = 1,
             ticksPerQuarterNote = 480,
             notes = listOf(ExpectedNote(positionTicks = 160)),
@@ -269,7 +267,6 @@ class ExerciseEditorViewModelTest {
             description = "Keep this",
             tempoBpm = 100.0,
             timeSignature = TimeSignature(3, 4),
-            countInMeasures = 2,
             measureCount = 1,
             ticksPerQuarterNote = 480,
             notes = listOf(ExpectedNote(positionTicks = 240, targetIntensity = 0.7)),
@@ -285,7 +282,6 @@ class ExerciseEditorViewModelTest {
         assertEquals("original-id", edited.id)
         assertEquals("Keep this", edited.description)
         assertEquals(TimeSignature(3, 4), edited.timeSignature)
-        assertEquals(2, edited.countInMeasures)
         assertEquals(original.notes, edited.notes)
         assertEquals(
             listOf(MeasureSubdivision.QUARTER, MeasureSubdivision.QUARTER),
@@ -306,7 +302,6 @@ class ExerciseEditorViewModelTest {
             description = "",
             tempoBpm = 100.0,
             timeSignature = TimeSignature(4, 4),
-            countInMeasures = 1,
             measureCount = 3,
             ticksPerQuarterNote = 480,
             notes = listOf(
@@ -479,7 +474,6 @@ class ExerciseEditorViewModelTest {
                     description = "",
                     tempoBpm = 100.0,
                     timeSignature = TimeSignature(4, 4),
-                    countInMeasures = 1,
                     measureCount = 3,
                     ticksPerQuarterNote = 480,
                     notes = listOf(

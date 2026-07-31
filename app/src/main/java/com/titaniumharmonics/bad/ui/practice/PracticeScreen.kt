@@ -121,7 +121,6 @@ fun PracticeRoute(
         onRepeat = viewModel::restartPlayback,
         onDecreaseTempo = viewModel::decreaseTempo,
         onIncreaseTempo = viewModel::increaseTempo,
-        onCountInEnabledChange = viewModel::setCountInEnabled,
         onDownbeatsOnlyChange = viewModel::setDownbeatsOnly,
         onDecreaseMeasureCount = viewModel::decreaseMeasureCount,
         onIncreaseMeasureCount = viewModel::increaseMeasureCount,
@@ -152,7 +151,6 @@ fun PracticeScreen(
     onRepeat: () -> Unit,
     onDecreaseTempo: () -> Unit,
     onIncreaseTempo: () -> Unit,
-    onCountInEnabledChange: (Boolean) -> Unit,
     onDownbeatsOnlyChange: (Boolean) -> Unit,
     onDecreaseMeasureCount: () -> Unit,
     onIncreaseMeasureCount: () -> Unit,
@@ -251,7 +249,6 @@ fun PracticeScreen(
                             ),
                             onDecreaseTempo = onDecreaseTempo,
                             onIncreaseTempo = onIncreaseTempo,
-                            onCountInEnabledChange = onCountInEnabledChange,
                             onDownbeatsOnlyChange = onDownbeatsOnlyChange,
                             onDecreaseMeasureCount = onDecreaseMeasureCount,
                             onIncreaseMeasureCount = onIncreaseMeasureCount,
@@ -290,11 +287,7 @@ private fun FullScreenPracticePlayer(
     val timing = remember(exercise) { ExerciseTiming(exercise) }
     val timelineElapsedNanos = when (uiState.phase) {
         PracticePhase.PREPARING -> {
-            if (exercise.countInMeasures > 0) {
-                -timing.quarterNoteDurationNanos
-            } else {
-                0L
-            }
+            -timing.quarterNoteDurationNanos
         }
         PracticePhase.COUNTING_IN -> {
             uiState.exerciseElapsedNanos.coerceAtLeast(
@@ -417,7 +410,6 @@ private fun PlaybackSettingsCard(
     enabled: Boolean,
     onDecreaseTempo: () -> Unit,
     onIncreaseTempo: () -> Unit,
-    onCountInEnabledChange: (Boolean) -> Unit,
     onDownbeatsOnlyChange: (Boolean) -> Unit,
     onDecreaseMeasureCount: () -> Unit,
     onIncreaseMeasureCount: () -> Unit,
@@ -447,28 +439,6 @@ private fun PlaybackSettingsCard(
                 onDecrease = onDecreaseTempo,
                 onIncrease = onIncreaseTempo,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Count-in",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Text(
-                        text = if (settings.countInEnabled) "Enabled" else "Disabled",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = settings.countInEnabled,
-                    onCheckedChange = onCountInEnabledChange,
-                    enabled = enabled,
-                )
-            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -969,7 +939,6 @@ private fun PracticeScreenPreview() {
         description = "Four measures of quarter notes.",
         tempoBpm = 100.0,
         timeSignature = TimeSignature(4, 4),
-        countInMeasures = 1,
         ticksPerQuarterNote = 480,
         measures = List(4) { measureIndex ->
             val measureStartTick = measureIndex * 1_920L
@@ -1010,7 +979,6 @@ private fun PracticeScreenPreview() {
             onRepeat = {},
             onDecreaseTempo = {},
             onIncreaseTempo = {},
-            onCountInEnabledChange = {},
             onDownbeatsOnlyChange = {},
             onDecreaseMeasureCount = {},
             onIncreaseMeasureCount = {},

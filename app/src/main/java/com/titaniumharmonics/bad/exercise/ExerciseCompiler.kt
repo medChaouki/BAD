@@ -71,7 +71,6 @@ object ExerciseCompiler {
                     description = exercise.description,
                     tempoBpm = exercise.tempoBpm,
                     timeSignature = exercise.timeSignature,
-                    countInMeasures = exercise.countInMeasures,
                     ticksPerQuarterNote = exercise.ticksPerQuarterNote,
                     measures = runtimeMeasures,
                 ),

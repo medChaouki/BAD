@@ -58,9 +58,6 @@ object ClickTrackGenerator {
         sampleRateHz: Int = DEFAULT_SAMPLE_RATE_HZ,
     ): ShortArray {
         require(sampleRateHz > 0) { "sampleRateHz must be greater than zero." }
-        require(exercise.countInMeasures > 0) {
-            "Exercise must have at least one count-in measure."
-        }
 
         val timing = ExerciseTiming(exercise)
         val samples = createSampleBuffer(
@@ -96,12 +93,7 @@ object ClickTrackGenerator {
         timing: ExerciseTiming,
         sampleRateHz: Int,
     ) {
-        if (exercise.countInMeasures == 0) return
-
-        val countInDurationTicks = Math.multiplyExact(
-            timing.measureDurationTicks,
-            exercise.countInMeasures.toLong(),
-        )
+        val countInDurationTicks = timing.measureDurationTicks
         var countInPositionTicks = 0L
         while (countInPositionTicks < countInDurationTicks) {
             mixClick(

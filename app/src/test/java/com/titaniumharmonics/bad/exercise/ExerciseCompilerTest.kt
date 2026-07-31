@@ -95,7 +95,6 @@ class ExerciseCompilerTest {
         assertEquals("Metadata description", runtime.description)
         assertEquals(137.5, runtime.tempoBpm, 0.0)
         assertEquals(TimeSignature(4, 4), runtime.timeSignature)
-        assertEquals(1, runtime.countInMeasures)
         assertEquals(480, runtime.ticksPerQuarterNote)
     }
 
@@ -310,7 +309,6 @@ class ExerciseCompilerTest {
                     numerator = 50_000_000,
                     denominator = 4,
                 ),
-                countInMeasures = 0,
                 measureCount = 1,
                 ticksPerQuarterNote = Int.MAX_VALUE,
                 notes = emptyList(),
@@ -427,7 +425,6 @@ class ExerciseCompilerTest {
         description = description,
         tempoBpm = tempoBpm,
         timeSignature = TimeSignature(numerator = 4, denominator = 4),
-        countInMeasures = 1,
         measureCount = measureCount,
         ticksPerQuarterNote = 480,
         notes = notes,
