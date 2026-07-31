@@ -39,8 +39,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -67,6 +69,7 @@ fun ExerciseEditorRoute(
     documentUri: String?,
     defaultExerciseFolderUri: String?,
     onNavigateBack: () -> Unit,
+    onPlayExercise: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val viewModelFactory = remember(context) {
@@ -74,12 +77,20 @@ fun ExerciseEditorRoute(
     }
     val viewModel: ExerciseEditorViewModel = viewModel(factory = viewModelFactory)
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var playAfterCreatingDocument by rememberSaveable {
+        mutableStateOf(false)
+    }
     val createExerciseDocument = rememberLauncherForActivityResult(
         contract = CreateExerciseDocumentContract(),
     ) { createdDocumentUri ->
+        val shouldPlayAfterSave = playAfterCreatingDocument
+        playAfterCreatingDocument = false
         createdDocumentUri?.let { documentUri ->
             ExerciseDocumentCatalog(context).rememberDefaultFolderDocument(documentUri)
-            viewModel.saveExercise(documentUri.toString())
+            viewModel.saveExercise(
+                destinationDocumentUri = documentUri.toString(),
+                playAfterSave = shouldPlayAfterSave,
+            )
         }
     }
 
@@ -88,6 +99,13 @@ fun ExerciseEditorRoute(
             viewModel.createExercise()
         } else {
             viewModel.loadExercise(documentUri)
+        }
+    }
+
+    LaunchedEffect(uiState.documentUriReadyToPlay) {
+        uiState.documentUriReadyToPlay?.let { savedDocumentUri ->
+            viewModel.consumePlayRequest()
+            onPlayExercise(savedDocumentUri)
         }
     }
 
@@ -104,6 +122,7 @@ fun ExerciseEditorRoute(
         onToggleMeasureNote = viewModel::toggleMeasureNote,
         onSave = {
             if (uiState.sourceDocumentUri == null) {
+                playAfterCreatingDocument = false
                 createExerciseDocument.launch(
                     CreateExerciseDocumentRequest(
                         fileName = uiState.suggestedFileName(),
@@ -112,6 +131,19 @@ fun ExerciseEditorRoute(
                 )
             } else {
                 viewModel.saveExercise()
+            }
+        },
+        onPlay = {
+            if (uiState.sourceDocumentUri == null) {
+                playAfterCreatingDocument = true
+                createExerciseDocument.launch(
+                    CreateExerciseDocumentRequest(
+                        fileName = uiState.suggestedFileName(),
+                        initialFolderUri = defaultExerciseFolderUri?.let(Uri::parse),
+                    ),
+                )
+            } else {
+                viewModel.saveExercise(playAfterSave = true)
             }
         },
     )
@@ -131,6 +163,7 @@ fun ExerciseEditorScreen(
     onMeasureSubdivisionChange: (Int, MeasureSubdivision) -> Unit,
     onToggleMeasureNote: (Int, Long) -> Unit,
     onSave: () -> Unit,
+    onPlay: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -219,18 +252,30 @@ fun ExerciseEditorScreen(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            Button(
-                onClick = onSave,
-                enabled = uiState.canSave,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    when {
-                        uiState.isSaving -> "Saving…"
-                        uiState.sourceDocumentUri == null -> "Save exercise"
-                        else -> "Overwrite exercise"
-                    },
-                )
+                Button(
+                    onClick = onSave,
+                    enabled = uiState.canSave,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        when {
+                            uiState.isSaving -> "Saving…"
+                            uiState.sourceDocumentUri == null -> "Save exercise"
+                            else -> "Overwrite exercise"
+                        },
+                    )
+                }
+                Button(
+                    onClick = onPlay,
+                    enabled = uiState.canSave,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Play exercise")
+                }
             }
         }
     }
@@ -620,6 +665,7 @@ private fun ExerciseEditorScreenPreview() {
             onMeasureSubdivisionChange = { _, _ -> },
             onToggleMeasureNote = { _, _ -> },
             onSave = {},
+            onPlay = {},
         )
     }
 }

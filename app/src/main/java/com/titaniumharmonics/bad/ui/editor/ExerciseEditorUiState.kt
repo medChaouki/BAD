@@ -10,6 +10,7 @@ data class ExerciseEditorUiState(
     val sourceDocumentUri: String? = null,
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
+    val documentUriReadyToPlay: String? = null,
     val message: String? = null,
     val errorMessage: String? = null,
 ) {

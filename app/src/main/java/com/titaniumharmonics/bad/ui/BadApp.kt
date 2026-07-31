@@ -26,6 +26,7 @@ fun BadApp(
                 onModifyExercise = viewModel::openExerciseLibraryForModify,
                 onLoadExercise = viewModel::openExerciseLibraryForPractice,
                 documentUriToLoad = uiState.practiceDocumentUriToLoad,
+                startAfterLoad = uiState.startPracticeAfterLoad,
                 onDocumentLoadConsumed = viewModel::consumePracticeDocumentToLoad,
                 fileOperationsEnabled = uiState.storageInitializationComplete,
             )
@@ -43,6 +44,7 @@ fun BadApp(
                 documentUri = uiState.editorDocumentUri,
                 defaultExerciseFolderUri = uiState.defaultExerciseFolderUri,
                 onNavigateBack = viewModel::navigateBack,
+                onPlayExercise = viewModel::playEditorExercise,
             )
         }
     }

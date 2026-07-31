@@ -15,6 +15,7 @@ data class AppUiState(
     val destination: AppDestination = AppDestination.PRACTICE,
     val exerciseLibraryPurpose: ExerciseLibraryPurpose = ExerciseLibraryPurpose.MODIFY,
     val practiceDocumentUriToLoad: String? = null,
+    val startPracticeAfterLoad: Boolean = false,
     val editorDocumentUri: String? = null,
     val editorReturnDestination: AppDestination = AppDestination.PRACTICE,
     val defaultExerciseFolderUri: String? = null,
@@ -34,6 +35,7 @@ internal fun AppUiState.openLibraryExercise(documentUri: String): AppUiState =
         ExerciseLibraryPurpose.PRACTICE -> copy(
             destination = AppDestination.PRACTICE,
             practiceDocumentUriToLoad = documentUri,
+            startPracticeAfterLoad = false,
         )
         ExerciseLibraryPurpose.MODIFY -> copy(
             destination = AppDestination.EXERCISE_EDITOR,
@@ -41,3 +43,10 @@ internal fun AppUiState.openLibraryExercise(documentUri: String): AppUiState =
             editorReturnDestination = AppDestination.EXERCISE_LIBRARY,
         )
     }
+
+internal fun AppUiState.playEditorExercise(documentUri: String): AppUiState = copy(
+    destination = AppDestination.PRACTICE,
+    practiceDocumentUriToLoad = documentUri,
+    startPracticeAfterLoad = true,
+    editorDocumentUri = null,
+)

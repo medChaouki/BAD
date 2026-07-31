@@ -49,7 +49,10 @@ class PracticeViewModel(
     private var restartJob: Job? = null
     private var phaseBeforePause: PracticePhase = PracticePhase.RUNNING
 
-    fun loadExercise(documentUri: String) {
+    fun loadExercise(
+        documentUri: String,
+        startAfterLoad: Boolean = false,
+    ) {
         if (loadJob?.isActive == true) return
         stopPlayback()
         mutableUiState.value = PracticeUiState(phase = PracticePhase.LOADING)
@@ -78,6 +81,9 @@ class PracticeViewModel(
                     phase = PracticePhase.READY,
                     exerciseElapsedNanos = -timing.countInDurationNanos,
                 )
+                if (startAfterLoad) {
+                    startPlayback()
+                }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {

@@ -235,7 +235,10 @@ class ExerciseEditorViewModel(
         )
     }
 
-    fun saveExercise(destinationDocumentUri: String? = null) {
+    fun saveExercise(
+        destinationDocumentUri: String? = null,
+        playAfterSave: Boolean = false,
+    ) {
         if (documentJob?.isActive == true) return
         val state = mutableUiState.value
         val documentUri = destinationDocumentUri ?: state.sourceDocumentUri
@@ -256,6 +259,7 @@ class ExerciseEditorViewModel(
 
         mutableUiState.value = state.copy(
             isSaving = true,
+            documentUriReadyToPlay = null,
             message = null,
             errorMessage = null,
         )
@@ -274,6 +278,7 @@ class ExerciseEditorViewModel(
                     measures = rebasedMeasures,
                     sourceDocumentUri = documentUri,
                     isSaving = false,
+                    documentUriReadyToPlay = documentUri.takeIf { playAfterSave },
                     message = "Exercise saved.",
                 )
             } catch (exception: CancellationException) {
@@ -285,6 +290,12 @@ class ExerciseEditorViewModel(
                 )
             }
         }
+    }
+
+    fun consumePlayRequest() {
+        mutableUiState.value = mutableUiState.value.copy(
+            documentUriReadyToPlay = null,
+        )
     }
 
     internal fun buildEditedExercise(

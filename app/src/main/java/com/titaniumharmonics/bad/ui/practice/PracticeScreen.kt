@@ -67,6 +67,7 @@ fun PracticeRoute(
     onModifyExercise: () -> Unit,
     onLoadExercise: () -> Unit,
     documentUriToLoad: String?,
+    startAfterLoad: Boolean,
     onDocumentLoadConsumed: () -> Unit,
     fileOperationsEnabled: Boolean,
     viewModel: PracticeViewModel = viewModel(),
@@ -74,9 +75,12 @@ fun PracticeRoute(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    LaunchedEffect(documentUriToLoad) {
+    LaunchedEffect(documentUriToLoad, startAfterLoad) {
         documentUriToLoad?.let { documentUri ->
-            viewModel.loadExercise(documentUri)
+            viewModel.loadExercise(
+                documentUri = documentUri,
+                startAfterLoad = startAfterLoad,
+            )
             onDocumentLoadConsumed()
         }
     }
