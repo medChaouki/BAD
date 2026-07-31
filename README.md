@@ -172,7 +172,8 @@ and `7`. Each pattern's compact overflow menu supports duplicate, clear, move
 up, and move down actions; swipe left continues to expose deletion. Duplicate
 copies the complete pattern and multiplier, while Clear explicitly creates a
 silent pattern without changing its subdivision or multiplier. New patterns
-start at `×1` with all four Quarter slots enabled.
+start at `×1` with all four Quarter slots enabled, and the editor scrolls to
+the new pattern after Add Pattern is pressed.
 Selecting another subdivision resets that pattern with every new slot enabled;
 tapping a slot then enables or disables its expected note. Notes outside the
 selected grid remain preserved and produce a warning until an explicit

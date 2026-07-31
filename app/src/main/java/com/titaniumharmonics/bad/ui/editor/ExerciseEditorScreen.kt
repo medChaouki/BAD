@@ -20,7 +20,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
@@ -175,6 +177,16 @@ fun ExerciseEditorScreen(
     onSave: () -> Unit,
     onPlay: () -> Unit,
 ) {
+    val measureListState = rememberLazyListState()
+    var scrollToLastPatternAfterAdd by remember { mutableStateOf(false) }
+
+    LaunchedEffect(uiState.measures.size, scrollToLastPatternAfterAdd) {
+        if (scrollToLastPatternAfterAdd && uiState.measures.isNotEmpty()) {
+            measureListState.animateScrollToItem(uiState.measures.lastIndex)
+            scrollToLastPatternAfterAdd = false
+        }
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -241,12 +253,16 @@ fun ExerciseEditorScreen(
                 onIncreaseMeasureMultiplier = onIncreaseMeasureMultiplier,
                 onMeasureSubdivisionChange = onMeasureSubdivisionChange,
                 onToggleMeasureNote = onToggleMeasureNote,
+                listState = measureListState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
             )
             Button(
-                onClick = onAddMeasure,
+                onClick = {
+                    scrollToLastPatternAfterAdd = true
+                    onAddMeasure()
+                },
                 enabled = !uiState.isLoading && !uiState.isSaving,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -307,6 +323,7 @@ private fun MeasureList(
     onIncreaseMeasureMultiplier: (Int) -> Unit,
     onMeasureSubdivisionChange: (Int, MeasureSubdivision) -> Unit,
     onToggleMeasureNote: (Int, Long) -> Unit,
+    listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -329,6 +346,7 @@ private fun MeasureList(
             }
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
