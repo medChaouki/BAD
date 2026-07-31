@@ -10,8 +10,8 @@ each hit was early, on time, late, or missed.
 
 The project is currently an early version 1 prototype. It can select, load,
 edit, save, and run a single-lane exercise with a generated metronome and a
-scrolling Compose timeline. Microphone capture and hit detection are not
-implemented yet.
+scrolling Compose timeline. Practice sessions are captured as WAV audio;
+automatic hit detection is not implemented yet.
 
 ## Current features
 
@@ -27,6 +27,8 @@ implemented yet.
 - Distinct quarter-note count-in and note-driven exercise clicks
 - Accented first beat of each measure
 - Streaming `AudioTrack` output
+- Practice-session microphone capture to 48 kHz mono PCM WAV
+- Temporary debug-only in-app recording playback, position, and deletion
 - Single-lane scrolling rhythm timeline
 - Static first-measure preview while an exercise is idle
 - BPM-scaled beat highlights at the judgement line
@@ -145,7 +147,7 @@ the sum of all multipliers.
 
 ```text
 app/src/main/java/com/titaniumharmonics/bad/
-├── audio/       PCM click generation and AudioTrack output
+├── audio/       Metronome output, WAV recording, and debug playback
 ├── exercise/    Exercise model, JSON codec, validation, and asset loading
 ├── timing/      Monotonic clock, musical timing, and session progression
 └── ui/
@@ -274,6 +276,22 @@ one-based measure and total measure count beneath the status. It preserves that
 progress while paused or during Resume count-in and shows the final measure on
 completion. Stop returns to the exercise settings.
 
+Microphone permission is requested when the app opens if it has not already
+been granted, and is checked again before every session. A declined permission
+is requested again on the next app launch. Recording starts immediately before
+the mandatory count-in, pauses with practice playback, and resumes before the
+resume count-in. Natural completion finalizes
+`Music/B.A.D/recordings/debug-recording.wav` in app-specific external storage;
+stopped, cancelled, or failed sessions discard their partial recording.
+
+Debug builds show a temporary **Debug: Recorded Audio** card after natural
+completion. It uses Android `MediaPlayer` to play, pause, stop, replay, or
+delete the WAV and shows its current position, duration, and file path. A new
+practice session stops debug playback and replaces the previous recording.
+Leaving the Practice screen releases both capture and playback resources. The
+recording pipeline remains present in release builds, but this playback card is
+compiled behind `BuildConfig.DEBUG` and is not shown there.
+
 When microphone detection and hit matching are added, timing feedback will use
 a green ring for on-time hits, a blue ring for early hits, and a red ring for
 late hits. Missed notes will show a gray `X` at the expected-note position, and
@@ -310,13 +328,12 @@ Run Android lint:
 ## Planned version 1 work
 
 1. Output and microphone latency calibration
-2. Real-time mono PCM microphone capture
-3. Energy/envelope-based onset detection
-4. Detected-hit to expected-note matching
-5. Early, on-time, late, missed, and extra-hit judgements
-6. Hit-intensity measurement
-7. Immediate visual feedback
-8. Practice-session results
+2. Energy/envelope-based onset detection
+3. Detected-hit to expected-note matching
+4. Early, on-time, late, missed, and extra-hit judgements
+5. Hit-intensity measurement
+6. Immediate visual feedback
+7. Practice-session results
 
 Version 1 intentionally uses one generic rhythmic lane. Separate kick, snare,
 hi-hat, and tom lanes are future extensions.

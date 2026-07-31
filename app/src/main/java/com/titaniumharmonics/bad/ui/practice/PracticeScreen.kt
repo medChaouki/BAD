@@ -1,5 +1,9 @@
 package com.titaniumharmonics.bad.ui.practice
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +56,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.platform.LocalContext
+import com.titaniumharmonics.bad.BuildConfig
+import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
+import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.exercise.RuntimeExpectedNote
@@ -74,21 +83,67 @@ fun PracticeRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+    var startAfterPermissionGrant by rememberSaveable { mutableStateOf(false) }
+    var startWhenExerciseIsReady by rememberSaveable { mutableStateOf(false) }
+    var permissionRequestInFlight by remember { mutableStateOf(false) }
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        permissionRequestInFlight = false
+        if (granted && startAfterPermissionGrant) {
+            viewModel.startPlayback()
+        } else if (!granted) {
+            viewModel.onMicrophonePermissionDenied()
+        }
+        startAfterPermissionGrant = false
+    }
+    val requestSessionStart = {
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO,
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            viewModel.startPlayback()
+        } else {
+            startAfterPermissionGrant = true
+            if (!permissionRequestInFlight) {
+                permissionRequestInFlight = true
+                microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionRequestInFlight = true
+            microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
 
     LaunchedEffect(documentUriToLoad, startAfterLoad) {
         documentUriToLoad?.let { documentUri ->
-            viewModel.loadExercise(
-                documentUri = documentUri,
-                startAfterLoad = startAfterLoad,
-            )
+            startWhenExerciseIsReady = startAfterLoad
+            viewModel.loadExercise(documentUri)
             onDocumentLoadConsumed()
+        }
+    }
+
+    LaunchedEffect(uiState.phase, startWhenExerciseIsReady) {
+        if (startWhenExerciseIsReady && uiState.phase == PracticePhase.READY) {
+            startWhenExerciseIsReady = false
+            requestSessionStart()
         }
     }
 
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                viewModel.stopPlayback()
+                viewModel.releaseAudioResources()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -114,7 +169,7 @@ fun PracticeRoute(
         onLoad = onLoadExercise,
         fileOperationsEnabled = fileOperationsEnabled,
         onUnload = viewModel::unloadExercise,
-        onStart = viewModel::startPlayback,
+        onStart = requestSessionStart,
         onStop = viewModel::stopPlayback,
         onPause = viewModel::pausePlayback,
         onResume = viewModel::resumePlayback,
@@ -124,6 +179,11 @@ fun PracticeRoute(
         onDownbeatsOnlyChange = viewModel::setDownbeatsOnly,
         onDecreaseMeasureCount = viewModel::decreaseMeasureCount,
         onIncreaseMeasureCount = viewModel::increaseMeasureCount,
+        onPlayDebugRecording = viewModel::playDebugRecording,
+        onPauseDebugRecording = viewModel::pauseDebugRecording,
+        onStopDebugRecording = viewModel::stopDebugRecording,
+        onReplayDebugRecording = viewModel::replayDebugRecording,
+        onDeleteDebugRecording = viewModel::deleteDebugRecording,
     )
 }
 
@@ -154,6 +214,11 @@ fun PracticeScreen(
     onDownbeatsOnlyChange: (Boolean) -> Unit,
     onDecreaseMeasureCount: () -> Unit,
     onIncreaseMeasureCount: () -> Unit,
+    onPlayDebugRecording: () -> Unit,
+    onPauseDebugRecording: () -> Unit,
+    onStopDebugRecording: () -> Unit,
+    onReplayDebugRecording: () -> Unit,
+    onDeleteDebugRecording: () -> Unit,
 ) {
     val playbackExercise = uiState.playbackExercise
     var playbackSettingsExpanded by rememberSaveable(uiState.exercise?.id) {
@@ -167,6 +232,11 @@ fun PracticeScreen(
             onResume = onResume,
             onRepeat = onRepeat,
             onStop = onStop,
+            onPlayDebugRecording = onPlayDebugRecording,
+            onPauseDebugRecording = onPauseDebugRecording,
+            onStopDebugRecording = onStopDebugRecording,
+            onReplayDebugRecording = onReplayDebugRecording,
+            onDeleteDebugRecording = onDeleteDebugRecording,
         )
         return
     }
@@ -283,6 +353,11 @@ private fun FullScreenPracticePlayer(
     onResume: () -> Unit,
     onRepeat: () -> Unit,
     onStop: () -> Unit,
+    onPlayDebugRecording: () -> Unit,
+    onPauseDebugRecording: () -> Unit,
+    onStopDebugRecording: () -> Unit,
+    onReplayDebugRecording: () -> Unit,
+    onDeleteDebugRecording: () -> Unit,
 ) {
     val timing = remember(exercise) { ExerciseTiming(exercise) }
     val timelineElapsedNanos = when (uiState.phase) {
@@ -351,6 +426,19 @@ private fun FullScreenPracticePlayer(
                 )
             }
         }
+        if (BuildConfig.DEBUG && uiState.phase == PracticePhase.COMPLETED) {
+            DebugRecordedAudioCard(
+                state = uiState.debugRecording,
+                onPlay = onPlayDebugRecording,
+                onPause = onPauseDebugRecording,
+                onStop = onStopDebugRecording,
+                onReplay = onReplayDebugRecording,
+                onDelete = onDeleteDebugRecording,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 20.dp),
+            )
+        }
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -402,6 +490,76 @@ private fun FullScreenPracticePlayer(
             }
         }
     }
+}
+
+@Composable
+private fun DebugRecordedAudioCard(
+    state: DebugRecordingPlaybackState,
+    onPlay: () -> Unit,
+    onPause: () -> Unit,
+    onStop: () -> Unit,
+    onReplay: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Debug: Recorded Audio", fontWeight = FontWeight.Bold)
+            Text(
+                "${state.positionMillis.toDebugTime()} / ${state.durationMillis.toDebugTime()}",
+            )
+            Text(
+                text = state.filePath ?: "No finalized recording",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(onClick = onPlay, enabled = state.canPlay, modifier = Modifier.weight(1f)) {
+                    Text("Play")
+                }
+                Button(
+                    onClick = onPause,
+                    enabled = state.phase == DebugRecordingPlaybackPhase.PLAYING,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Pause") }
+                OutlinedButton(
+                    onClick = onStop,
+                    enabled = state.phase in setOf(
+                        DebugRecordingPlaybackPhase.PLAYING,
+                        DebugRecordingPlaybackPhase.PAUSED,
+                        DebugRecordingPlaybackPhase.COMPLETED,
+                    ),
+                    modifier = Modifier.weight(1f),
+                ) { Text("Stop") }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onReplay,
+                    enabled = state.filePath != null,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Replay") }
+                OutlinedButton(
+                    onClick = onDelete,
+                    enabled = state.filePath != null,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Delete") }
+            }
+        }
+    }
+}
+
+private fun Long.toDebugTime(): String {
+    val totalSeconds = (this / 1_000L).coerceAtLeast(0L)
+    return "%d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
 }
 
 @Composable
@@ -982,6 +1140,11 @@ private fun PracticeScreenPreview() {
             onDownbeatsOnlyChange = {},
             onDecreaseMeasureCount = {},
             onIncreaseMeasureCount = {},
+            onPlayDebugRecording = {},
+            onPauseDebugRecording = {},
+            onStopDebugRecording = {},
+            onReplayDebugRecording = {},
+            onDeleteDebugRecording = {},
         )
     }
 }

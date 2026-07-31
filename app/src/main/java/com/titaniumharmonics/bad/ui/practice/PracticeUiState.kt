@@ -1,5 +1,6 @@
 package com.titaniumharmonics.bad.ui.practice
 
+import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
 
@@ -22,6 +23,7 @@ data class PracticeUiState(
     val phase: PracticePhase = PracticePhase.UNLOADED,
     val exerciseElapsedNanos: Long = 0L,
     val countInBeatsRemaining: Int = 0,
+    val debugRecording: DebugRecordingPlaybackState = DebugRecordingPlaybackState(),
     val errorMessage: String? = null,
 ) {
     val playbackExercise: RuntimeExercise?
