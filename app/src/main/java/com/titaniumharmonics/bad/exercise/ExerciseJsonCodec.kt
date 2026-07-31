@@ -45,6 +45,7 @@ private data class ExerciseDto(
     val ticksPerQuarterNote: Int,
     val notes: List<ExpectedNoteDto>,
     val measureSubdivisions: List<MeasureSubdivisionDto>? = null,
+    val measureMultipliers: List<Int>? = null,
 ) {
     fun toDomain(): EditableExercise {
         if (fileType != ExerciseFormat.FILE_TYPE) {
@@ -69,6 +70,10 @@ private data class ExerciseDto(
                 ?: List(measureCount.coerceAtLeast(0)) {
                     MeasureSubdivision.QUARTER
                 },
+            measureMultipliers = measureMultipliers
+                ?: List(measureCount.coerceAtLeast(0)) {
+                    MeasurePatternConstraints.DEFAULT_MULTIPLIER
+                },
         )
     }
 
@@ -88,6 +93,7 @@ private data class ExerciseDto(
             measureSubdivisions = exercise.measureSubdivisions.map(
                 MeasureSubdivisionDto::fromDomain,
             ),
+            measureMultipliers = exercise.measureMultipliers,
         )
     }
 }

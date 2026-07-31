@@ -66,6 +66,7 @@ class ExerciseTimingTest {
             editableExercise.copy(
                 measureCount = 4,
                 measureSubdivisions = List(4) { MeasureSubdivision.QUARTER },
+                measureMultipliers = List(4) { 1 },
             ).compileForTest(),
         )
 
@@ -73,6 +74,22 @@ class ExerciseTimingTest {
         assertEquals(1, fourMeasureTiming.measureNumberAt(2_399_999_999L))
         assertEquals(2, fourMeasureTiming.measureNumberAt(2_400_000_000L))
         assertEquals(4, fourMeasureTiming.measureNumberAt(9_600_000_000L))
+    }
+
+    @Test
+    fun expandedPatterns_controlDurationAndMeasureProgress() {
+        val expandedExercise = editableExercise.copy(
+            measureMultipliers = listOf(4),
+        ).compileForTest()
+        val timing = ExerciseTiming(expandedExercise)
+
+        assertEquals(4, expandedExercise.measureCount)
+        assertEquals(7_680L, expandedExercise.totalTicks)
+        assertEquals(9_600_000_000L, timing.exerciseDurationNanos)
+        assertEquals(1, timing.measureNumberAt(0L))
+        assertEquals(2, timing.measureNumberAt(2_400_000_000L))
+        assertEquals(3, timing.measureNumberAt(4_800_000_000L))
+        assertEquals(4, timing.measureNumberAt(7_200_000_000L))
     }
 
     @Test

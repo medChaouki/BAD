@@ -10,6 +10,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -57,6 +58,7 @@ import com.titaniumharmonics.bad.exercise.CreateExerciseDocumentContract
 import com.titaniumharmonics.bad.exercise.CreateExerciseDocumentRequest
 import com.titaniumharmonics.bad.exercise.ExerciseDocumentCatalog
 import com.titaniumharmonics.bad.exercise.MeasureSubdivision
+import com.titaniumharmonics.bad.exercise.MeasurePatternConstraints
 import com.titaniumharmonics.bad.ui.theme.BADTheme
 import kotlin.math.roundToInt
 
@@ -96,6 +98,8 @@ fun ExerciseEditorRoute(
         onTempoBpmChange = viewModel::setTempoBpmText,
         onAddMeasure = viewModel::addMeasure,
         onDeleteMeasure = viewModel::deleteMeasure,
+        onDecreaseMeasureMultiplier = viewModel::decreaseMeasureMultiplier,
+        onIncreaseMeasureMultiplier = viewModel::increaseMeasureMultiplier,
         onMeasureSubdivisionChange = viewModel::setMeasureSubdivision,
         onToggleMeasureNote = viewModel::toggleMeasureNote,
         onSave = {
@@ -122,6 +126,8 @@ fun ExerciseEditorScreen(
     onTempoBpmChange: (String) -> Unit,
     onAddMeasure: () -> Unit,
     onDeleteMeasure: (Int) -> Unit,
+    onDecreaseMeasureMultiplier: (Int) -> Unit,
+    onIncreaseMeasureMultiplier: (Int) -> Unit,
     onMeasureSubdivisionChange: (Int, MeasureSubdivision) -> Unit,
     onToggleMeasureNote: (Int, Long) -> Unit,
     onSave: () -> Unit,
@@ -169,14 +175,23 @@ fun ExerciseEditorScreen(
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text(
-                text = "Measures",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Measure patterns",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = uiState.patternSummary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             MeasureList(
                 measures = uiState.measures,
                 onDeleteMeasure = onDeleteMeasure,
+                onDecreaseMeasureMultiplier = onDecreaseMeasureMultiplier,
+                onIncreaseMeasureMultiplier = onIncreaseMeasureMultiplier,
                 onMeasureSubdivisionChange = onMeasureSubdivisionChange,
                 onToggleMeasureNote = onToggleMeasureNote,
                 modifier = Modifier
@@ -188,7 +203,7 @@ fun ExerciseEditorScreen(
                 enabled = !uiState.isLoading && !uiState.isSaving,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Add Measure")
+                Text("Add Pattern")
             }
             uiState.errorMessage?.let { errorMessage ->
                 Text(
@@ -225,6 +240,8 @@ fun ExerciseEditorScreen(
 private fun MeasureList(
     measures: List<EditorMeasureUiState>,
     onDeleteMeasure: (Int) -> Unit,
+    onDecreaseMeasureMultiplier: (Int) -> Unit,
+    onIncreaseMeasureMultiplier: (Int) -> Unit,
     onMeasureSubdivisionChange: (Int, MeasureSubdivision) -> Unit,
     onToggleMeasureNote: (Int, Long) -> Unit,
     modifier: Modifier = Modifier,
@@ -260,8 +277,13 @@ private fun MeasureList(
                     val measure = measures[index]
                     SwipeToDeleteMeasure(
                         measure = measure,
-                        measureNumber = index + 1,
                         onDelete = { onDeleteMeasure(measure.id) },
+                        onDecreaseMultiplier = {
+                            onDecreaseMeasureMultiplier(measure.id)
+                        },
+                        onIncreaseMultiplier = {
+                            onIncreaseMeasureMultiplier(measure.id)
+                        },
                         onSubdivisionChange = { subdivision ->
                             onMeasureSubdivisionChange(measure.id, subdivision)
                         },
@@ -281,8 +303,9 @@ private fun MeasureList(
 @Composable
 private fun SwipeToDeleteMeasure(
     measure: EditorMeasureUiState,
-    measureNumber: Int,
     onDelete: () -> Unit,
+    onDecreaseMultiplier: () -> Unit,
+    onIncreaseMultiplier: () -> Unit,
     onSubdivisionChange: (MeasureSubdivision) -> Unit,
     onToggleNote: (Long) -> Unit,
 ) {
@@ -326,7 +349,8 @@ private fun SwipeToDeleteMeasure(
 
         MeasureGridCard(
             measure = measure,
-            measureNumber = measureNumber,
+            onDecreaseMultiplier = onDecreaseMultiplier,
+            onIncreaseMultiplier = onIncreaseMultiplier,
             onSubdivisionChange = onSubdivisionChange,
             onToggleNote = onToggleNote,
             modifier = Modifier
@@ -356,7 +380,8 @@ private fun SwipeToDeleteMeasure(
 @Composable
 private fun MeasureGridCard(
     measure: EditorMeasureUiState,
-    measureNumber: Int,
+    onDecreaseMultiplier: () -> Unit,
+    onIncreaseMultiplier: () -> Unit,
     onSubdivisionChange: (MeasureSubdivision) -> Unit,
     onToggleNote: (Long) -> Unit,
     modifier: Modifier = Modifier,
@@ -371,11 +396,22 @@ private fun MeasureGridCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = "Measure $measureNumber",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = measure.expandedMeasureLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                MultiplierControl(
+                    multiplier = measure.multiplier,
+                    onDecrease = onDecreaseMultiplier,
+                    onIncrease = onIncreaseMultiplier,
+                )
+            }
             SubdivisionSelector(
                 selectedSubdivision = measure.subdivision,
                 onSubdivisionChange = onSubdivisionChange,
@@ -405,6 +441,41 @@ private fun MeasureGridCard(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun MultiplierControl(
+    multiplier: Int,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        TextButton(
+            onClick = onDecrease,
+            enabled = multiplier > MeasurePatternConstraints.MIN_MULTIPLIER,
+            contentPadding = PaddingValues(0.dp),
+            modifier = Modifier.size(40.dp),
+        ) {
+            Text("−")
+        }
+        Text(
+            text = "×$multiplier",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(40.dp),
+        )
+        TextButton(
+            onClick = onIncrease,
+            enabled = multiplier < MeasurePatternConstraints.MAX_MULTIPLIER,
+            contentPadding = PaddingValues(0.dp),
+            modifier = Modifier.size(40.dp),
+        ) {
+            Text("+")
         }
     }
 }
@@ -530,25 +601,36 @@ private fun ExerciseEditorScreenPreview() {
                     EditorRhythmGrid.buildMeasure(
                         id = 1,
                         editedMeasureIndex = 0,
+                        multiplier = 2,
                     ),
                     EditorRhythmGrid.buildMeasure(
                         id = 2,
                         editedMeasureIndex = 1,
                         subdivision = MeasureSubdivision.SIXTEENTH,
                     ),
-                ),
+                ).withExpandedMeasureRanges(),
             ),
             onNavigateBack = {},
             onExerciseNameChange = {},
             onTempoBpmChange = {},
             onAddMeasure = {},
             onDeleteMeasure = {},
+            onDecreaseMeasureMultiplier = {},
+            onIncreaseMeasureMultiplier = {},
             onMeasureSubdivisionChange = { _, _ -> },
             onToggleMeasureNote = { _, _ -> },
             onSave = {},
         )
     }
 }
+
+private val ExerciseEditorUiState.patternSummary: String
+    get() {
+        val patternLabel = if (patternCount == 1) "pattern" else "patterns"
+        val measureLabel = if (totalExpandedMeasureCount == 1) "measure" else "measures"
+        return "$patternCount $patternLabel · " +
+            "$totalExpandedMeasureCount $measureLabel"
+    }
 
 private fun ExerciseEditorUiState.suggestedFileName(): String {
     val baseName = exerciseName

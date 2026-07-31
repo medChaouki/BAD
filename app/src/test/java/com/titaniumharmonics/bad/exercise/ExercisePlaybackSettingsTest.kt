@@ -35,6 +35,24 @@ class ExercisePlaybackSettingsTest {
         assertTrue(settings.countInEnabled)
         assertEquals(2, settings.measureCount)
         assertFalse(settings.downbeatsOnly)
+        assertEquals(16, settings.maximumMeasureCount)
+    }
+
+    @Test
+    fun fromExercise_preservesExpandedRuntimeCountsAboveDefaultLimit() {
+        val expandedExercise = editableExercise.copy(
+            measureCount = 1,
+            notes = listOf(ExpectedNote(positionTicks = 0, accent = true)),
+            measureSubdivisions = listOf(MeasureSubdivision.QUARTER),
+            measureMultipliers = listOf(20),
+        ).compileForTest()
+
+        val settings = ExercisePlaybackSettings.fromExercise(expandedExercise)
+        val configuredExercise = settings.applyTo(expandedExercise)
+
+        assertEquals(20, settings.measureCount)
+        assertEquals(20, settings.maximumMeasureCount)
+        assertEquals(20, configuredExercise.measureCount)
     }
 
     @Test
@@ -76,5 +94,27 @@ class ExercisePlaybackSettingsTest {
             configuredExercise.notes.map { it.positionTicks },
         )
         assertEquals(listOf(0, 1, 2, 3, 4), configuredExercise.measures.map { it.index })
+    }
+
+    @Test
+    fun applyTo_repeatsTheEntireExpandedRuntimeSequence() {
+        val expandedExercise = editableExercise.copy(
+            notes = listOf(
+                ExpectedNote(positionTicks = 0),
+                ExpectedNote(positionTicks = 1_920 + 240),
+            ),
+            measureMultipliers = listOf(2, 1),
+        ).compileForTest()
+
+        val configuredExercise = ExercisePlaybackSettings(
+            tempoBpm = 100,
+            countInEnabled = true,
+            measureCount = 5,
+        ).applyTo(expandedExercise)
+
+        assertEquals(
+            listOf(0L, 1_920L, 4_080L, 5_760L, 7_680L),
+            configuredExercise.notes.map(RuntimeExpectedNote::positionTicks),
+        )
     }
 }

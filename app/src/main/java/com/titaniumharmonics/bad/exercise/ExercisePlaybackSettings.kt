@@ -5,13 +5,18 @@ data class ExercisePlaybackSettings(
     val countInEnabled: Boolean,
     val measureCount: Int,
     val downbeatsOnly: Boolean = false,
+    val maximumMeasureCount: Int = DEFAULT_MAX_MEASURE_COUNT,
 ) {
     init {
         require(tempoBpm in MIN_TEMPO_BPM..MAX_TEMPO_BPM) {
             "tempoBpm must be between $MIN_TEMPO_BPM and $MAX_TEMPO_BPM."
         }
-        require(measureCount in MIN_MEASURE_COUNT..MAX_MEASURE_COUNT) {
-            "measureCount must be between $MIN_MEASURE_COUNT and $MAX_MEASURE_COUNT."
+        require(maximumMeasureCount >= MIN_MEASURE_COUNT) {
+            "maximumMeasureCount must be at least $MIN_MEASURE_COUNT."
+        }
+        require(measureCount in MIN_MEASURE_COUNT..maximumMeasureCount) {
+            "measureCount must be between $MIN_MEASURE_COUNT and " +
+                "$maximumMeasureCount."
         }
     }
 
@@ -56,16 +61,19 @@ data class ExercisePlaybackSettings(
         const val MAX_TEMPO_BPM = 240
         const val TEMPO_STEP_BPM = 5
         const val MIN_MEASURE_COUNT = 1
-        const val MAX_MEASURE_COUNT = 16
+        const val DEFAULT_MAX_MEASURE_COUNT = 16
 
         fun fromExercise(exercise: RuntimeExercise): ExercisePlaybackSettings =
             ExercisePlaybackSettings(
                 tempoBpm = exercise.tempoBpm.toInt()
                     .coerceIn(MIN_TEMPO_BPM, MAX_TEMPO_BPM),
                 countInEnabled = exercise.countInMeasures > 0,
-                measureCount = exercise.measureCount
-                    .coerceIn(MIN_MEASURE_COUNT, MAX_MEASURE_COUNT),
+                measureCount = exercise.measureCount,
                 downbeatsOnly = false,
+                maximumMeasureCount = maxOf(
+                    DEFAULT_MAX_MEASURE_COUNT,
+                    exercise.measureCount,
+                ),
             )
     }
 }

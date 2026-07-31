@@ -58,6 +58,20 @@ class ClickTrackGeneratorTest {
     }
 
     @Test
+    fun generate_playsEveryCompiledMultiplierRepetition() {
+        val expandedExercise = editableExercise.copy(
+            notes = listOf(ExpectedNote(positionTicks = 0)),
+            measureMultipliers = listOf(3),
+        ).compileForTest()
+        val samples = ClickTrackGenerator.generate(expandedExercise)
+
+        assertEquals(288_000, samples.size)
+        assertTrue(peakNearSample(samples, 0) > 10_000)
+        assertTrue(peakNearSample(samples, 96_000) > 10_000)
+        assertTrue(peakNearSample(samples, 192_000) > 10_000)
+    }
+
+    @Test
     fun generate_placesClicksAtEighthTripletAndSixteenthPositions() {
         val selectedNotes = editableExercise.copy(
             notes = listOf(
@@ -119,6 +133,7 @@ class ClickTrackGeneratorTest {
             measureCount = 2,
             notes = listOf(ExpectedNote(positionTicks = 0)),
             measureSubdivisions = List(2) { MeasureSubdivision.QUARTER },
+            measureMultipliers = List(2) { 1 },
         ).compileForTest()
         val samples = ClickTrackGenerator.generate(exerciseWithEmptySecondMeasure)
         val samplesPerBeat = 24_000

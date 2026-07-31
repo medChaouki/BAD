@@ -265,7 +265,8 @@ private fun ExerciseLibraryCard(
             )
             Text(
                 text = "${exercise.tempoBpm.toDisplayText()} BPM • " +
-                    exercise.measureCount.toMeasureCountText(),
+                    "${exercise.patternCount.toPatternCountText()} \u2022 " +
+                    exercise.expandedMeasureCount.toMeasureCountText(),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -278,6 +279,9 @@ private fun Double.toDisplayText(): String =
 
 private fun Int.toMeasureCountText(): String =
     if (this == 1) "1 measure" else "$this measures"
+
+private fun Int.toPatternCountText(): String =
+    if (this == 1) "1 pattern" else "$this patterns"
 
 private val EXERCISE_MIME_TYPES = arrayOf(
     "application/json",

@@ -8,6 +8,80 @@ import org.junit.Test
 
 class ExerciseCompilerTest {
     @Test
+    fun compile_multiplierOneProducesOneRuntimeMeasure() {
+        val runtime = validExercise(
+            measureMultipliers = listOf(1),
+        ).compileSuccessfully()
+
+        assertEquals(1, runtime.measureCount)
+        assertEquals(listOf(0), runtime.measures.map(RuntimeMeasure::index))
+    }
+
+    @Test
+    fun compile_multiplierFourProducesFourSequentialRuntimeMeasures() {
+        val runtime = validExercise(
+            measureMultipliers = listOf(4),
+        ).compileSuccessfully()
+
+        assertEquals(4, runtime.measureCount)
+        assertEquals(listOf(0, 1, 2, 3), runtime.measures.map(RuntimeMeasure::index))
+        assertEquals(
+            listOf(0L, 1_920L, 3_840L, 5_760L),
+            runtime.measures.map(RuntimeMeasure::startTick),
+        )
+        assertEquals(7_680L, runtime.totalTicks)
+    }
+
+    @Test
+    fun compile_mixedMultipliersExpandPatternsWithCorrectNoteOffsets() {
+        val editable = validExercise(
+            measureCount = 2,
+            measureSubdivisions = listOf(
+                MeasureSubdivision.QUARTER,
+                MeasureSubdivision.EIGHTH,
+            ),
+            measureMultipliers = listOf(3, 2),
+            notes = listOf(
+                ExpectedNote(positionTicks = 0L, accent = true),
+                ExpectedNote(positionTicks = 480L),
+                ExpectedNote(positionTicks = 1_920L, targetIntensity = 0.7),
+                ExpectedNote(positionTicks = 2_160L),
+            ),
+        )
+
+        val runtime = editable.compileSuccessfully()
+
+        assertEquals(2, editable.measureCount)
+        assertEquals(listOf(3, 2), editable.measureMultipliers)
+        assertEquals(5, runtime.measureCount)
+        assertEquals(9_600L, runtime.totalTicks)
+        assertEquals(listOf(0, 1, 2, 3, 4), runtime.measures.map { it.index })
+        assertEquals(
+            listOf(
+                0L,
+                480L,
+                1_920L,
+                2_400L,
+                3_840L,
+                4_320L,
+                5_760L,
+                6_000L,
+                7_680L,
+                7_920L,
+            ),
+            runtime.notes.map(RuntimeExpectedNote::positionTicks),
+        )
+        assertEquals(
+            listOf(0L, 480L, 0L, 480L, 0L, 480L, 0L, 240L, 0L, 240L),
+            runtime.notes.map(RuntimeExpectedNote::positionInMeasureTicks),
+        )
+        assertEquals(
+            runtime.notes.map(RuntimeExpectedNote::positionTicks).distinct(),
+            runtime.notes.map(RuntimeExpectedNote::positionTicks),
+        )
+    }
+
+    @Test
     fun compile_preservesPlaybackMetadataAndBpm() {
         val runtime = validExercise(
             id = "metadata-id",
@@ -48,10 +122,26 @@ class ExerciseCompilerTest {
     }
 
     @Test
+    fun compile_repeatsQuarterNotesAtEveryRuntimeMeasureOffset() {
+        assertRepeatedPositions(
+            subdivision = MeasureSubdivision.QUARTER,
+            localPositions = listOf(0L, 480L, 960L, 1_440L),
+        )
+    }
+
+    @Test
     fun compile_preservesEighthNoteTiming() {
         assertCompiledPositions(
             subdivision = MeasureSubdivision.EIGHTH,
             positions = (0 until 8).map { it * 240L },
+        )
+    }
+
+    @Test
+    fun compile_repeatsEighthNotesAtEveryRuntimeMeasureOffset() {
+        assertRepeatedPositions(
+            subdivision = MeasureSubdivision.EIGHTH,
+            localPositions = (0 until 8).map { it * 240L },
         )
     }
 
@@ -64,10 +154,26 @@ class ExerciseCompilerTest {
     }
 
     @Test
+    fun compile_repeatsExactEighthTripletsWithoutRounding() {
+        assertRepeatedPositions(
+            subdivision = MeasureSubdivision.EIGHTH_TRIPLET,
+            localPositions = (0 until 12).map { it * 160L },
+        )
+    }
+
+    @Test
     fun compile_preservesSixteenthNoteTiming() {
         assertCompiledPositions(
             subdivision = MeasureSubdivision.SIXTEENTH,
             positions = (0 until 16).map { it * 120L },
+        )
+    }
+
+    @Test
+    fun compile_repeatsSixteenthNotesAtEveryRuntimeMeasureOffset() {
+        assertRepeatedPositions(
+            subdivision = MeasureSubdivision.SIXTEENTH,
+            localPositions = (0 until 16).map { it * 120L },
         )
     }
 
@@ -121,6 +227,46 @@ class ExerciseCompilerTest {
     }
 
     @Test
+    fun compile_repeatsSilentPatternsWithoutAddingNotes() {
+        val runtime = validExercise(
+            notes = emptyList(),
+            measureMultipliers = listOf(4),
+        ).compileSuccessfully()
+
+        assertEquals(4, runtime.measureCount)
+        assertTrue(runtime.notes.isEmpty())
+        assertTrue(runtime.measures.all { it.notes.isEmpty() })
+    }
+
+    @Test
+    fun compile_preservesMixedSubdivisionPatternTiming() {
+        val runtime = validExercise(
+            measureCount = 3,
+            measureSubdivisions = listOf(
+                MeasureSubdivision.QUARTER,
+                MeasureSubdivision.EIGHTH_TRIPLET,
+                MeasureSubdivision.SIXTEENTH,
+            ),
+            measureMultipliers = listOf(2, 2, 1),
+            notes = listOf(
+                ExpectedNote(positionTicks = 480L),
+                ExpectedNote(positionTicks = 1_920L + 160L),
+                ExpectedNote(positionTicks = 3_840L + 120L),
+            ),
+        ).compileSuccessfully()
+
+        assertEquals(5, runtime.measureCount)
+        assertEquals(
+            listOf(480L, 2_400L, 4_000L, 5_920L, 7_800L),
+            runtime.notes.map(RuntimeExpectedNote::positionTicks),
+        )
+        assertEquals(
+            listOf(480L, 480L, 160L, 160L, 120L),
+            runtime.notes.map(RuntimeExpectedNote::positionInMeasureTicks),
+        )
+    }
+
+    @Test
     fun compile_returnsFailureForAnInvalidEmptyExercise() {
         val result = ExerciseCompiler.compile(
             validExercise(
@@ -135,6 +281,49 @@ class ExerciseCompilerTest {
         val errors = (result as ExerciseCompilationResult.Failure).validationErrors
         assertTrue(errors.any { it.contains("name") })
         assertTrue(errors.any { it.contains("measureCount") })
+    }
+
+    @Test
+    fun compile_returnsFailureForInvalidMultiplier() {
+        val result = ExerciseCompiler.compile(
+            validExercise(measureMultipliers = listOf(0)),
+        )
+
+        assertTrue(result is ExerciseCompilationResult.Failure)
+        assertTrue(
+            (result as ExerciseCompilationResult.Failure).validationErrors.any {
+                it.contains("measureMultipliers[0]")
+            },
+        )
+    }
+
+    @Test
+    fun compile_returnsFailureWhenExpandedTicksOverflow() {
+        val result = ExerciseCompiler.compile(
+            EditableExercise(
+                formatVersion = ExerciseFormat.CURRENT_VERSION,
+                id = "overflow",
+                name = "Overflow",
+                description = "",
+                tempoBpm = 100.0,
+                timeSignature = TimeSignature(
+                    numerator = 50_000_000,
+                    denominator = 4,
+                ),
+                countInMeasures = 0,
+                measureCount = 1,
+                ticksPerQuarterNote = Int.MAX_VALUE,
+                notes = emptyList(),
+                measureMultipliers = listOf(99),
+            ),
+        )
+
+        assertTrue(result is ExerciseCompilationResult.Failure)
+        assertTrue(
+            (result as ExerciseCompilationResult.Failure).validationErrors.any {
+                it.contains("expanded", ignoreCase = true)
+            },
+        )
     }
 
     @Test
@@ -191,6 +380,28 @@ class ExerciseCompilerTest {
         assertEquals(positions, runtime.notes.map { it.positionInMeasureTicks })
     }
 
+    private fun assertRepeatedPositions(
+        subdivision: MeasureSubdivision,
+        localPositions: List<Long>,
+    ) {
+        val runtime = validExercise(
+            measureSubdivisions = listOf(subdivision),
+            measureMultipliers = listOf(2),
+            notes = localPositions.map(::ExpectedNote),
+        ).compileSuccessfully()
+
+        val expectedPositions = localPositions + localPositions.map { it + 1_920L }
+        assertEquals(2, runtime.measureCount)
+        assertEquals(
+            expectedPositions,
+            runtime.notes.map(RuntimeExpectedNote::positionTicks),
+        )
+        assertEquals(
+            localPositions + localPositions,
+            runtime.notes.map(RuntimeExpectedNote::positionInMeasureTicks),
+        )
+    }
+
     private fun EditableExercise.compileSuccessfully(): RuntimeExercise =
         when (val result = ExerciseCompiler.compile(this)) {
             is ExerciseCompilationResult.Success -> result.exercise
@@ -207,6 +418,7 @@ class ExerciseCompilerTest {
         measureCount: Int = 1,
         measureSubdivisions: List<MeasureSubdivision> =
             List(measureCount) { MeasureSubdivision.QUARTER },
+        measureMultipliers: List<Int> = List(measureCount) { 1 },
         notes: List<ExpectedNote> = listOf(ExpectedNote(positionTicks = 0L)),
     ): EditableExercise = EditableExercise(
         formatVersion = ExerciseFormat.CURRENT_VERSION,
@@ -220,5 +432,6 @@ class ExerciseCompilerTest {
         ticksPerQuarterNote = 480,
         notes = notes,
         measureSubdivisions = measureSubdivisions,
+        measureMultipliers = measureMultipliers,
     )
 }

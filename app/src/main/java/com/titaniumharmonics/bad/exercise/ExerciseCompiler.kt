@@ -9,28 +9,60 @@ object ExerciseCompiler {
 
         return try {
             val measureDurationTicks = calculateMeasureDurationTicks(exercise)
-            val notesByMeasure = exercise.notes.groupBy { note ->
+            val notesByPattern = exercise.notes.groupBy { note ->
                 (note.positionTicks / measureDurationTicks).toInt()
             }
-            val runtimeMeasures = List(exercise.measureCount) { measureIndex ->
-                val startTick = Math.multiplyExact(
-                    measureDurationTicks,
-                    measureIndex.toLong(),
-                )
-                RuntimeMeasure(
-                    index = measureIndex,
-                    startTick = startTick,
-                    durationTicks = measureDurationTicks,
-                    notes = notesByMeasure[measureIndex].orEmpty().map { note ->
-                        RuntimeExpectedNote(
-                            measureIndex = measureIndex,
-                            positionInMeasureTicks = note.positionTicks - startTick,
-                            positionTicks = note.positionTicks,
+            val expandedMeasureCount = exercise.expandedMeasureCount
+            val totalTicks = Math.multiplyExact(
+                measureDurationTicks,
+                expandedMeasureCount.toLong(),
+            )
+            var runtimeMeasureIndex = 0
+            val runtimeMeasures = buildList(expandedMeasureCount) {
+                repeat(exercise.measureCount) { patternIndex ->
+                    val patternStartTick = Math.multiplyExact(
+                        measureDurationTicks,
+                        patternIndex.toLong(),
+                    )
+                    val patternNotes = notesByPattern[patternIndex].orEmpty().map { note ->
+                        PatternNote(
+                            positionInMeasureTicks = note.positionTicks - patternStartTick,
                             accent = note.accent,
                             targetIntensity = note.targetIntensity,
                         )
-                    },
-                )
+                    }
+                    repeat(exercise.measureMultipliers[patternIndex]) {
+                        val runtimeStartTick = Math.multiplyExact(
+                            measureDurationTicks,
+                            runtimeMeasureIndex.toLong(),
+                        )
+                        add(
+                            RuntimeMeasure(
+                                index = runtimeMeasureIndex,
+                                startTick = runtimeStartTick,
+                                durationTicks = measureDurationTicks,
+                                notes = patternNotes.map { note ->
+                                    val absolutePositionTicks = Math.addExact(
+                                        runtimeStartTick,
+                                        note.positionInMeasureTicks,
+                                    )
+                                    check(absolutePositionTicks in 0 until totalTicks) {
+                                        "Generated note position is outside runtime bounds."
+                                    }
+                                    RuntimeExpectedNote(
+                                        measureIndex = runtimeMeasureIndex,
+                                        positionInMeasureTicks =
+                                            note.positionInMeasureTicks,
+                                        positionTicks = absolutePositionTicks,
+                                        accent = note.accent,
+                                        targetIntensity = note.targetIntensity,
+                                    )
+                                },
+                            ),
+                        )
+                        runtimeMeasureIndex = Math.addExact(runtimeMeasureIndex, 1)
+                    }
+                }
             }
             ExerciseCompilationResult.Success(
                 RuntimeExercise(
@@ -46,7 +78,14 @@ object ExerciseCompiler {
             )
         } catch (exception: ArithmeticException) {
             ExerciseCompilationResult.Failure(
-                listOf("Exercise timing exceeds the supported tick range."),
+                listOf("Expanded exercise timing exceeds the supported runtime range."),
+            )
+        } catch (exception: IllegalStateException) {
+            ExerciseCompilationResult.Failure(
+                listOf(
+                    exception.message
+                        ?: "Exercise cannot produce a valid runtime representation.",
+                ),
             )
         }
     }
@@ -61,6 +100,12 @@ object ExerciseCompiler {
         )
         return scaledTicks / exercise.timeSignature.denominator
     }
+
+    private data class PatternNote(
+        val positionInMeasureTicks: Long,
+        val accent: Boolean,
+        val targetIntensity: Double?,
+    )
 }
 
 sealed interface ExerciseCompilationResult {

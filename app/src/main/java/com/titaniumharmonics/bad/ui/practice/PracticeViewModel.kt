@@ -356,7 +356,7 @@ class PracticeViewModel(
         updatePlaybackSettings { settings ->
             settings.copy(
                 measureCount = (settings.measureCount + 1)
-                    .coerceAtMost(ExercisePlaybackSettings.MAX_MEASURE_COUNT),
+                    .coerceAtMost(settings.maximumMeasureCount),
             )
         }
     }

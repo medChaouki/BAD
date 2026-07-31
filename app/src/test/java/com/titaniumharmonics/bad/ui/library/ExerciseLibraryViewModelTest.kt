@@ -15,7 +15,8 @@ class ExerciseLibraryViewModelTest {
             fileName = "valid.json",
             exerciseName = "Valid exercise",
             tempoBpm = 100.0,
-            measureCount = 2,
+            patternCount = 2,
+            expandedMeasureCount = 5,
         )
         viewModel.applyExercises(listOf(exercise))
 

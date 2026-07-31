@@ -17,7 +17,8 @@ data class ExerciseLibraryItem(
     val fileName: String,
     val exerciseName: String,
     val tempoBpm: Double,
-    val measureCount: Int,
+    val patternCount: Int,
+    val expandedMeasureCount: Int,
 )
 
 interface ExerciseLibraryRepository {
@@ -153,12 +154,21 @@ class DefaultExerciseLibraryRepository(
         val exercise = runCatching {
             documentStore.read(documentUri.toString())
         }.getOrNull() ?: return null
-        return ExerciseLibraryItem(
+        return exercise.toLibraryItem(
             documentUri = documentUri.toString(),
             fileName = fileName,
-            exerciseName = exercise.name,
-            tempoBpm = exercise.tempoBpm,
-            measureCount = exercise.measureCount,
         )
     }
 }
+
+internal fun EditableExercise.toLibraryItem(
+    documentUri: String,
+    fileName: String,
+): ExerciseLibraryItem = ExerciseLibraryItem(
+    documentUri = documentUri,
+    fileName = fileName,
+    exerciseName = name,
+    tempoBpm = tempoBpm,
+    patternCount = measureCount,
+    expandedMeasureCount = expandedMeasureCount,
+)

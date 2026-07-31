@@ -31,6 +31,25 @@ object ExerciseValidator {
                     "(${exercise.measureCount} expected).",
             )
         }
+        if (exercise.measureMultipliers.size != exercise.measureCount) {
+            add(
+                "measureMultipliers must contain exactly one entry per measure pattern " +
+                    "(${exercise.measureCount} expected).",
+            )
+        }
+        exercise.measureMultipliers.forEachIndexed { index, multiplier ->
+            if (
+                multiplier !in
+                MeasurePatternConstraints.MIN_MULTIPLIER..
+                    MeasurePatternConstraints.MAX_MULTIPLIER
+            ) {
+                add(
+                    "measureMultipliers[$index] must be between " +
+                        "${MeasurePatternConstraints.MIN_MULTIPLIER} and " +
+                        "${MeasurePatternConstraints.MAX_MULTIPLIER}.",
+                )
+            }
+        }
         if (exercise.ticksPerQuarterNote <= 0) {
             add("ticksPerQuarterNote must be greater than zero.")
         }

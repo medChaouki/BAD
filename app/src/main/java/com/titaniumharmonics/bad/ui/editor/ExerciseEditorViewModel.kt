@@ -11,6 +11,7 @@ import com.titaniumharmonics.bad.exercise.ExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExpectedNote
 import com.titaniumharmonics.bad.exercise.MeasureSubdivision
+import com.titaniumharmonics.bad.exercise.MeasurePatternConstraints
 import com.titaniumharmonics.bad.exercise.TimeSignature
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -82,11 +83,12 @@ class ExerciseEditorViewModel(
                     editedMeasureIndex = index,
                     originalMeasureIndex = index,
                     subdivision = exercise.measureSubdivisions[index],
+                    multiplier = exercise.measureMultipliers[index],
                     ticksPerQuarterNote = exercise.ticksPerQuarterNote,
                     timeSignature = exercise.timeSignature,
                     notes = exercise.editorNotesForMeasure(index),
                 )
-            },
+            }.withExpandedMeasureRanges(),
             sourceDocumentUri = documentUri,
         )
     }
@@ -109,18 +111,52 @@ class ExerciseEditorViewModel(
             sourceExercise?.timeSignature ?: EditorRhythmGrid.DEFAULT_TIME_SIGNATURE
         val subdivision = MeasureSubdivision.QUARTER
         mutableUiState.value = state.copy(
-            measures = state.measures + EditorRhythmGrid.buildMeasure(
-                id = nextMeasureId,
-                editedMeasureIndex = state.measures.size,
-                subdivision = subdivision,
-                ticksPerQuarterNote = ticksPerQuarterNote,
-                timeSignature = timeSignature,
-                notes = EditorRhythmGrid.fullyEnabledNotes(
+            measures = (
+                state.measures + EditorRhythmGrid.buildMeasure(
+                    id = nextMeasureId,
+                    editedMeasureIndex = state.measures.size,
                     subdivision = subdivision,
                     ticksPerQuarterNote = ticksPerQuarterNote,
                     timeSignature = timeSignature,
-                ),
-            ),
+                    notes = EditorRhythmGrid.fullyEnabledNotes(
+                        subdivision = subdivision,
+                        ticksPerQuarterNote = ticksPerQuarterNote,
+                        timeSignature = timeSignature,
+                    ),
+                )
+            ).withExpandedMeasureRanges(),
+            message = null,
+            errorMessage = null,
+        )
+    }
+
+    fun increaseMeasureMultiplier(measureId: Int) {
+        updateMeasureMultiplier(measureId, change = 1)
+    }
+
+    fun decreaseMeasureMultiplier(measureId: Int) {
+        updateMeasureMultiplier(measureId, change = -1)
+    }
+
+    private fun updateMeasureMultiplier(
+        measureId: Int,
+        change: Int,
+    ) {
+        val state = mutableUiState.value
+        if (state.measures.none { it.id == measureId }) return
+        mutableUiState.value = state.copy(
+            measures = state.measures.map { measure ->
+                if (measure.id == measureId) {
+                    measure.copy(
+                        multiplier = (measure.multiplier + change).coerceIn(
+                            MeasurePatternConstraints.MIN_MULTIPLIER,
+                            MeasurePatternConstraints.MAX_MULTIPLIER,
+                        ),
+                    )
+                } else {
+                    measure
+                }
+            }.withExpandedMeasureRanges(),
             message = null,
             errorMessage = null,
         )
@@ -276,6 +312,9 @@ class ExerciseEditorViewModel(
                 measureSubdivisions = state.measures.map(
                     EditorMeasureUiState::subdivision,
                 ),
+                measureMultipliers = state.measures.map(
+                    EditorMeasureUiState::multiplier,
+                ),
             )
         } ?: EditableExercise(
             formatVersion = ExerciseFormat.CURRENT_VERSION,
@@ -292,6 +331,9 @@ class ExerciseEditorViewModel(
             ),
             measureSubdivisions = state.measures.map(
                 EditorMeasureUiState::subdivision,
+            ),
+            measureMultipliers = state.measures.map(
+                EditorMeasureUiState::multiplier,
             ),
         )
     }
@@ -380,12 +422,13 @@ private fun List<EditorMeasureUiState>.rebuildGrid(
         editedMeasureIndex = editedIndex,
         originalMeasureIndex = measure.originalMeasureIndex,
         subdivision = measure.subdivision,
+        multiplier = measure.multiplier,
         ticksPerQuarterNote = sourceExercise?.ticksPerQuarterNote
             ?: EditorRhythmGrid.DEFAULT_TICKS_PER_QUARTER_NOTE,
         timeSignature = sourceExercise?.timeSignature
             ?: EditorRhythmGrid.DEFAULT_TIME_SIGNATURE,
         notes = measure.notes,
     )
-}
+}.withExpandedMeasureRanges()
 
 private const val DEFAULT_TICKS_PER_MEASURE = 1_920L

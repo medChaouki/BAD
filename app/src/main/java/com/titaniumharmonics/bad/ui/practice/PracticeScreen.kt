@@ -475,7 +475,7 @@ private fun PlaybackSettingsCard(
                 decreaseEnabled = enabled &&
                     settings.measureCount > ExercisePlaybackSettings.MIN_MEASURE_COUNT,
                 increaseEnabled = enabled &&
-                    settings.measureCount < ExercisePlaybackSettings.MAX_MEASURE_COUNT,
+                    settings.measureCount < settings.maximumMeasureCount,
                 onDecrease = onDecreaseMeasureCount,
                 onIncrease = onIncreaseMeasureCount,
             )

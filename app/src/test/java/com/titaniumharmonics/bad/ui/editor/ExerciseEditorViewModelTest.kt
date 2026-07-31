@@ -5,6 +5,7 @@ import com.titaniumharmonics.bad.exercise.ExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseFormat
 import com.titaniumharmonics.bad.exercise.ExpectedNote
 import com.titaniumharmonics.bad.exercise.MeasureSubdivision
+import com.titaniumharmonics.bad.exercise.MeasurePatternConstraints
 import com.titaniumharmonics.bad.exercise.TimeSignature
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -25,6 +26,81 @@ class ExerciseEditorViewModelTest {
         )
         assertEquals(listOf(4, 4), measures.map { it.slots.size })
         assertEquals(8, measures.sumOf { measure -> measure.slots.count { it.hasNote } })
+        assertEquals(listOf(1, 1), measures.map(EditorMeasureUiState::multiplier))
+    }
+
+    @Test
+    fun measureMultiplier_incrementsAndDecrements() {
+        val viewModel = ExerciseEditorViewModel(FakeExerciseDocumentStore())
+        viewModel.addMeasure()
+
+        viewModel.increaseMeasureMultiplier(measureId = 1)
+        assertEquals(2, viewModel.uiState.value.measures.single().multiplier)
+
+        viewModel.decreaseMeasureMultiplier(measureId = 1)
+        assertEquals(1, viewModel.uiState.value.measures.single().multiplier)
+    }
+
+    @Test
+    fun measureMultiplier_cannotDecreaseBelowOne() {
+        val viewModel = ExerciseEditorViewModel(FakeExerciseDocumentStore())
+        viewModel.addMeasure()
+
+        viewModel.decreaseMeasureMultiplier(measureId = 1)
+        viewModel.decreaseMeasureMultiplier(measureId = 1)
+
+        assertEquals(1, viewModel.uiState.value.measures.single().multiplier)
+    }
+
+    @Test
+    fun measureMultiplier_cannotIncreaseAboveSafetyLimit() {
+        val viewModel = ExerciseEditorViewModel(FakeExerciseDocumentStore())
+        viewModel.addMeasure()
+
+        repeat(MeasurePatternConstraints.MAX_MULTIPLIER + 5) {
+            viewModel.increaseMeasureMultiplier(measureId = 1)
+        }
+
+        assertEquals(
+            MeasurePatternConstraints.MAX_MULTIPLIER,
+            viewModel.uiState.value.measures.single().multiplier,
+        )
+    }
+
+    @Test
+    fun mixedMultipliers_updateExpandedCountRangesAndFollowingIndexes() {
+        val viewModel = ExerciseEditorViewModel(FakeExerciseDocumentStore())
+        repeat(3) { viewModel.addMeasure() }
+        repeat(3) { viewModel.increaseMeasureMultiplier(measureId = 1) }
+        viewModel.increaseMeasureMultiplier(measureId = 2)
+
+        val expandedState = viewModel.uiState.value
+        assertEquals(3, expandedState.patternCount)
+        assertEquals(7, expandedState.totalExpandedMeasureCount)
+        assertEquals(
+            listOf(1, 5, 7),
+            expandedState.measures.map(EditorMeasureUiState::expandedStartMeasureNumber),
+        )
+        assertEquals(
+            listOf(4, 6, 7),
+            expandedState.measures.map(EditorMeasureUiState::expandedEndMeasureNumber),
+        )
+        assertEquals(
+            listOf("Measures 1–4", "Measures 5–6", "Measure 7"),
+            expandedState.measures.map(EditorMeasureUiState::expandedMeasureLabel),
+        )
+
+        viewModel.decreaseMeasureMultiplier(measureId = 1)
+
+        val updatedMeasures = viewModel.uiState.value.measures
+        assertEquals(
+            listOf(1, 4, 6),
+            updatedMeasures.map(EditorMeasureUiState::expandedStartMeasureNumber),
+        )
+        assertEquals(
+            listOf(3, 5, 6),
+            updatedMeasures.map(EditorMeasureUiState::expandedEndMeasureNumber),
+        )
     }
 
     @Test
@@ -70,10 +146,46 @@ class ExerciseEditorViewModelTest {
         val exercise = viewModel.buildEditedExercise()
 
         assertEquals(1, exercise.measureCount)
+        assertEquals(listOf(1), exercise.measureMultipliers)
         assertEquals(
             listOf(0L, 480L, 960L, 1_440L),
             exercise.notes.map(ExpectedNote::positionTicks),
         )
+    }
+
+    @Test
+    fun buildAndReload_preservesMeasureMultipliers() {
+        val viewModel = ExerciseEditorViewModel(FakeExerciseDocumentStore())
+        val original = EditableExercise(
+            formatVersion = ExerciseFormat.CURRENT_VERSION,
+            id = "multiplier-test",
+            name = "Multiplier test",
+            description = "",
+            tempoBpm = 100.0,
+            timeSignature = TimeSignature(4, 4),
+            countInMeasures = 1,
+            measureCount = 2,
+            ticksPerQuarterNote = 480,
+            notes = emptyList(),
+            measureMultipliers = listOf(4, 2),
+        )
+
+        viewModel.applyLoadedExercise(original, "content://exercise/multipliers")
+        val edited = viewModel.buildEditedExercise()
+        val reopenedViewModel = ExerciseEditorViewModel(FakeExerciseDocumentStore())
+        reopenedViewModel.applyLoadedExercise(
+            edited,
+            "content://exercise/multipliers",
+        )
+
+        assertEquals(listOf(4, 2), edited.measureMultipliers)
+        assertEquals(
+            listOf(4, 2),
+            reopenedViewModel.uiState.value.measures.map(
+                EditorMeasureUiState::multiplier,
+            ),
+        )
+        assertEquals(6, reopenedViewModel.uiState.value.totalExpandedMeasureCount)
     }
 
     @Test

@@ -33,7 +33,7 @@ implemented yet.
 - Full-screen practice playback with pause, resume, repeat, and stop controls
 - Branded adaptive launcher icon and orientation-aware startup screen
 - Exercise creation and modification with JSON file creation and overwriting
-- Editable per-measure rhythmic grids with persisted subdivisions
+- Editable rhythmic measure patterns with persisted subdivisions and multipliers
 - Purpose-aware exercise library with tap-to-load or tap-to-edit and
   long-press deletion
 - Home screen sections for creating or modifying exercises and starting practice
@@ -98,6 +98,12 @@ Example:
     "eighth_triplet",
     "sixteenth"
   ],
+  "measureMultipliers": [
+    1,
+    1,
+    1,
+    1
+  ],
   "notes": [
     {
       "positionTicks": 0,
@@ -130,6 +136,12 @@ exercise files without this field remain valid and use `quarter` for every
 measure. Changing a subdivision explicitly resets that measure with every slot
 in the new grid enabled.
 
+`measureCount` is the number of editable measure patterns.
+`measureMultipliers` stores how many consecutive measures each pattern
+represents. Existing files without this field default every pattern to `1`.
+Each multiplier must be between `1` and `99`; the expanded exercise length is
+the sum of all multipliers.
+
 ## Project structure
 
 ```text
@@ -152,15 +164,24 @@ and storage layers continue to use the persisted representation. Exercise
 files are opened and created through Android's Storage Access Framework, so
 broad storage permission is not required.
 
-The editor changes the exercise name, BPM, measure count, each measure's
-persisted subdivision, and its note slots. New measures start with all four
-Quarter slots enabled. Selecting another subdivision resets that measure with
-every new slot enabled; tapping a slot then enables or disables its expected
-note. Notes outside the selected grid remain preserved and produce a warning
-until an explicit subdivision reset replaces the measure. When an existing
-file is overwritten, its identifier, description, time signature, count-in,
-and timing resolution are preserved. Measure duration comes from the exercise
-time signature and measure count.
+The editor changes the exercise name, BPM, pattern count, each pattern's
+persisted multiplier and subdivision, and its note slots. It shows both the
+editable pattern count and expanded measure count. Pattern labels use the
+expanded indexes, so multipliers `4`, `2`, and `1` produce ranges `1–4`, `5–6`,
+and `7`. New patterns start at `×1` with all four Quarter slots enabled.
+Selecting another subdivision resets that pattern with every new slot enabled;
+tapping a slot then enables or disables its expected note. Notes outside the
+selected grid remain preserved and produce a warning until an explicit
+subdivision reset replaces the pattern. When an existing file is overwritten,
+its identifier, description, time signature, count-in, and timing resolution
+are preserved. Pattern duration comes from the exercise time signature.
+
+When an exercise is loaded for practice, each compact pattern is expanded in
+memory into its configured number of flat, sequential runtime measures. The
+persisted JSON remains compact. Every repeated note keeps its exact
+measure-local tick and receives a new absolute position from its runtime
+measure offset, so Quarter, Eighth, Eighth-triplet, and Sixteenth timing remain
+exact.
 
 During playback, exercise metronome clicks occur only at exact expected-note
 ticks. Disabled notes and empty measures are silent. Count-in audio always uses
@@ -178,12 +199,16 @@ the selected exercise for Practice or opens it in the editor, according to the
 entry point. Pressing and holding requests permanent deletion with
 confirmation; the file is revalidated immediately before removal. Browse other
 folders keeps the Android document picker available for exercises stored
-elsewhere.
+elsewhere. Each library card shows BPM, compact pattern count, and expanded
+measure count.
 
 ## Timing model
 
-The exercise stores musical positions rather than elapsed timestamps. At
-runtime, musical ticks are converted to nanoseconds from the exercise tempo.
+The exercise stores musical positions rather than elapsed timestamps. During
+compilation, a runtime measure starts at
+`runtimeMeasureIndex × measureDurationTicks`, and each expected note is placed
+at `runtimeMeasureStartTick + positionInMeasureTicks`. At runtime, musical
+ticks are converted to nanoseconds from the exercise tempo.
 
 The practice session uses a monotonic clock. The scrolling timeline follows
 that clock; Compose animation is not the authoritative timing source.
