@@ -9,6 +9,7 @@ import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackController
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
 import com.titaniumharmonics.bad.audio.MediaPlayerRecordedAudioPlayer
 import com.titaniumharmonics.bad.audio.PracticeRecordingCoordinator
+import com.titaniumharmonics.bad.audio.PracticeRecordingPhase
 import com.titaniumharmonics.bad.audio.MetronomePlayer
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseCompilationResult
@@ -35,6 +36,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.ceil
+import java.io.File
 
 class PracticeViewModel(
     application: Application,
@@ -51,7 +53,14 @@ class PracticeViewModel(
     private val debugRecordingController = DebugRecordingPlaybackController(
         player = MediaPlayerRecordedAudioPlayer(),
         onStateChanged = { debugState ->
-            mutableUiState.value = mutableUiState.value.copy(debugRecording = debugState)
+            val state = mutableUiState.value
+            val completedSession = state.recordedSession?.takeIf {
+                File(it.wavFilePath).isFile
+            }
+            mutableUiState.value = state.copy(
+                recordedSession = completedSession,
+                debugRecording = debugState,
+            )
         },
     )
     private val practiceRecordingCoordinator = PracticeRecordingCoordinator(
@@ -113,7 +122,7 @@ class PracticeViewModel(
         stopPlayback()
         debugPositionJob?.cancel()
         debugAudioJob?.cancel()
-        debugRecordingController.deleteRecording()
+        practiceRecordingCoordinator.deleteCompletedSession()
         mutableUiState.value = PracticeUiState()
     }
 
@@ -157,6 +166,7 @@ class PracticeViewModel(
             phase = PracticePhase.PREPARING,
             exerciseElapsedNanos = -timing.countInDurationNanos,
             countInBeatsRemaining = timing.countInQuarterNoteCount,
+            recordedSession = null,
             errorMessage = null,
         )
 
@@ -168,7 +178,7 @@ class PracticeViewModel(
                 }
                 val playbackStartedNanos = withContext(Dispatchers.IO) {
                     debugPositionJob?.cancel()
-                    practiceRecordingCoordinator.startSession()
+                    practiceRecordingCoordinator.startSession(exercise)
                     metronomePlayer.start(
                         exercise = exercise,
                         downbeatsOnly = downbeatsOnly,
@@ -184,6 +194,12 @@ class PracticeViewModel(
                     val sessionElapsedNanos =
                         sessionElapsedClock.elapsedNanos() ?: break
                     val progress = progressCalculator.calculate(sessionElapsedNanos)
+                    if (progress.exerciseElapsedNanos >= 0L &&
+                        practiceRecordingCoordinator.phase ==
+                        PracticeRecordingPhase.INITIAL_COUNT_IN
+                    ) {
+                        practiceRecordingCoordinator.markExerciseStarted()
+                    }
                     mutableUiState.value = mutableUiState.value.copy(
                         phase = progress.phase.toUiPhase(),
                         exerciseElapsedNanos = progress.exerciseElapsedNanos,
@@ -211,9 +227,15 @@ class PracticeViewModel(
                     metronomePlayer.stop()
                     if (completedNormally) {
                         runCatching { practiceRecordingCoordinator.completeSession() }
+                            .onSuccess { recordedSession ->
+                                mutableUiState.value = mutableUiState.value.copy(
+                                    recordedSession = recordedSession,
+                                )
+                            }
                             .onFailure { exception ->
                                 mutableUiState.value = mutableUiState.value.copy(
                                     phase = PracticePhase.ERROR,
+                                    recordedSession = null,
                                     errorMessage = exception.message
                                         ?: "Unable to finalize microphone recording.",
                                 )
@@ -235,6 +257,23 @@ class PracticeViewModel(
         val timing = ExerciseTiming(exercise)
         val sessionElapsedNanos = sessionElapsedClock.pause() ?: return
         val progress = SessionProgressCalculator(timing).calculate(sessionElapsedNanos)
+        if (progress.exerciseElapsedNanos >= 0L &&
+            practiceRecordingCoordinator.phase == PracticeRecordingPhase.INITIAL_COUNT_IN
+        ) {
+            val startMarkerFailure = runCatching {
+                practiceRecordingCoordinator.markExerciseStarted()
+            }.exceptionOrNull()
+            if (startMarkerFailure != null) {
+                playbackJob?.cancel()
+                mutableUiState.value = state.copy(
+                    phase = PracticePhase.ERROR,
+                    recordedSession = null,
+                    errorMessage = startMarkerFailure.message
+                        ?: "Unable to capture the exercise-start sample frame.",
+                )
+                return
+            }
+        }
         phaseBeforePause = progress.phase.toUiPhase()
         mutableUiState.value = state.copy(
             phase = PracticePhase.PAUSED,
@@ -248,19 +287,20 @@ class PracticeViewModel(
         audioControlJob = viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    practiceRecordingCoordinator.pauseSession()
                     metronomePlayer.pause()
+                    practiceRecordingCoordinator.pauseSession()
                 }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                sessionElapsedClock.resume()
                 playbackJob?.cancel()
                 withContext(Dispatchers.IO) {
-                    runCatching { practiceRecordingCoordinator.resumeSession() }
+                    runCatching { practiceRecordingCoordinator.cancelSession() }
+                    runCatching { metronomePlayer.stop() }
                 }
                 mutableUiState.value = mutableUiState.value.copy(
                     phase = PracticePhase.ERROR,
+                    recordedSession = null,
                     errorMessage = exception.message ?: "Unable to pause metronome playback.",
                 )
             }
@@ -281,10 +321,12 @@ class PracticeViewModel(
             } catch (exception: Exception) {
                 playbackJob?.cancel()
                 withContext(Dispatchers.IO) {
-                    runCatching { practiceRecordingCoordinator.pauseSession() }
+                    runCatching { practiceRecordingCoordinator.cancelSession() }
+                    runCatching { metronomePlayer.stop() }
                 }
                 mutableUiState.value = mutableUiState.value.copy(
                     phase = PracticePhase.ERROR,
+                    recordedSession = null,
                     errorMessage = exception.message ?: "Unable to resume metronome playback.",
                 )
             }
@@ -298,8 +340,8 @@ class PracticeViewModel(
             countInBeatsRemaining = timing.countInQuarterNoteCount,
             errorMessage = null,
         )
+        practiceRecordingCoordinator.beginResumeCountIn()
         val countInStartedNanos = withContext(Dispatchers.IO) {
-            practiceRecordingCoordinator.resumeSession()
             metronomePlayer.startResumeCountIn(exercise)
         }
 
@@ -322,9 +364,11 @@ class PracticeViewModel(
 
     private suspend fun resumePausedPlayback() {
         withContext(Dispatchers.IO) {
-            metronomePlayer.resume()
+            practiceRecordingCoordinator.resumeSession {
+                metronomePlayer.resume()
+                sessionElapsedClock.resume()
+            }
         }
-        sessionElapsedClock.resume()
         mutableUiState.value = mutableUiState.value.copy(
             phase = phaseBeforePause,
             countInBeatsRemaining = 0,
@@ -427,7 +471,8 @@ class PracticeViewModel(
     }
 
     fun deleteDebugRecording() = runDebugAudioAction {
-        debugRecordingController.deleteRecording()
+        practiceRecordingCoordinator.deleteCompletedSession()
+        mutableUiState.value = mutableUiState.value.copy(recordedSession = null)
     }
 
     fun releaseAudioResources() {

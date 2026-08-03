@@ -40,4 +40,20 @@ class SessionElapsedClockTest {
         assertEquals(null, sessionClock.elapsedNanos())
         assertFalse(sessionClock.isPaused)
     }
+
+    @Test
+    fun elapsedNanos_remainsFrozenThroughoutResumeCountIn() {
+        sessionClock.start(startedNanos = 100L)
+        nowNanos = 600L
+        sessionClock.pause()
+
+        nowNanos = 5_600L
+        assertEquals(500L, sessionClock.elapsedNanos())
+        nowNanos = 9_600L
+        assertEquals(500L, sessionClock.elapsedNanos())
+
+        sessionClock.resume()
+        nowNanos = 10_100L
+        assertEquals(1_000L, sessionClock.elapsedNanos())
+    }
 }

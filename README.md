@@ -27,7 +27,8 @@ automatic hit detection is not implemented yet.
 - Distinct quarter-note count-in and note-driven exercise clicks
 - Accented first beat of each measure
 - Streaming `AudioTrack` output
-- Practice-session microphone capture to 48 kHz mono PCM WAV
+- Practice-session microphone capture to mono PCM WAV, preferring 48 kHz with
+  a 44.1 kHz fallback
 - Temporary debug-only in-app recording playback, position, and deletion
 - Single-lane scrolling rhythm timeline
 - Static first-measure preview while an exercise is idle
@@ -231,8 +232,10 @@ The practice session uses a monotonic clock. The scrolling timeline follows
 that clock; Compose animation is not the authoritative timing source.
 
 Metronome clicks are sample-aligned relative to one another. Physical output
-latency still depends on the Android device and audio route. Output-latency
-calibration has not been implemented yet.
+latency still depends on the Android device and audio route. Output-latency and
+microphone-input calibration have not been implemented yet. Recorded sample
+indexes remove structural pause and resume-count-in timing errors, but a small
+fixed device-dependent input/output offset remains for a later calibration PR.
 
 Playback settings can be adjusted while an exercise is idle. They remain in
 effect for repeated runs of that exercise and reset when another exercise is
@@ -279,15 +282,26 @@ completion. Stop returns to the exercise settings.
 Microphone permission is requested when the app opens if it has not already
 been granted, and is checked again before every session. A declined permission
 is requested again on the next app launch. Recording starts immediately before
-the mandatory count-in, pauses with practice playback, and resumes before the
-resume count-in. Natural completion finalizes
+the mandatory initial count-in and pauses with practice playback. It remains
+paused throughout every resume count-in, then resumes in the same logical
+transition as exercise playback. Natural completion finalizes
 `Music/B.A.D/recordings/debug-recording.wav` in app-specific external storage;
 stopped, cancelled, or failed sessions discard their partial recording.
+
+A successfully finalized WAV produces an immutable in-memory
+`RecordedSession`. The recorder's successfully written sample-frame count is
+authoritative: `exerciseStartSampleFrame` marks the first graded exercise
+sample, while earlier samples belong to the initial count-in. Paused time and
+resume count-ins append no frames, so offline grading can subtract this start
+index to obtain continuous exercise-relative sample positions. No session
+metadata or timeline sidecar is written to storage.
 
 Debug builds show a temporary **Debug: Recorded Audio** card after natural
 completion. It uses Android `MediaPlayer` to play, pause, stop, replay, or
 delete the WAV and shows its current position, duration, and file path. A new
-practice session stops debug playback and replaces the previous recording.
+practice session stops debug playback and replaces the previous recording. It
+also shows the actual sample rate, total and graded frame counts, the exercise
+start frame, and recording and graded durations.
 Leaving the Practice screen releases both capture and playback resources. The
 recording pipeline remains present in release builds, but this playback card is
 compiled behind `BuildConfig.DEBUG` and is not shown there.

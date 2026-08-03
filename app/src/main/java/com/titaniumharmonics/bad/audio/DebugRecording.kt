@@ -1,10 +1,5 @@
 package com.titaniumharmonics.bad.audio
 
-data class DebugRecording(
-    val filePath: String,
-    val durationMillis: Long,
-)
-
 enum class DebugRecordingPlaybackPhase {
     UNAVAILABLE,
     READY,
@@ -30,10 +25,13 @@ data class DebugRecordingPlaybackState(
 }
 
 interface SessionAudioRecorder {
+    val format: PcmAudioFormat?
+    val totalWrittenSampleFrames: Long
+
     fun start()
     fun pause()
     fun resume()
-    fun finish(): DebugRecording
+    fun finish(): FinalizedRecording
     fun cancel()
     fun release()
 }
@@ -52,4 +50,3 @@ interface RecordedAudioPlayer {
     fun currentPositionMillis(): Long
     fun release()
 }
-

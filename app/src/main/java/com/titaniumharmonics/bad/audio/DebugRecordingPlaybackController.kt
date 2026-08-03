@@ -9,20 +9,20 @@ class DebugRecordingPlaybackController(
     var state: DebugRecordingPlaybackState = DebugRecordingPlaybackState()
         private set
 
-    fun setRecording(recording: DebugRecording?) {
+    fun setRecording(recording: RecordedSession?) {
         player.release()
         if (recording == null) {
             update(DebugRecordingPlaybackState())
             return
         }
-        val file = File(recording.filePath)
+        val file = File(recording.wavFilePath)
         if (!file.isFile) {
             update(errorState("Recorded WAV file is missing."))
             return
         }
         try {
             val playerDurationMillis = player.prepare(
-                filePath = recording.filePath,
+                filePath = recording.wavFilePath,
                 onCompletion = {
                     update(
                         state.copy(
@@ -37,8 +37,8 @@ class DebugRecordingPlaybackController(
             update(
                 DebugRecordingPlaybackState(
                     phase = DebugRecordingPlaybackPhase.READY,
-                    filePath = recording.filePath,
-                    durationMillis = recording.durationMillis.takeIf { it > 0L }
+                    filePath = recording.wavFilePath,
+                    durationMillis = recording.recordingDurationMillis.takeIf { it > 0L }
                         ?: playerDurationMillis,
                 ),
             )

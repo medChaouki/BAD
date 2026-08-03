@@ -61,6 +61,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.titaniumharmonics.bad.BuildConfig
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
+import com.titaniumharmonics.bad.audio.RecordedSession
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.exercise.RuntimeExpectedNote
@@ -429,6 +430,7 @@ private fun FullScreenPracticePlayer(
         if (BuildConfig.DEBUG && uiState.phase == PracticePhase.COMPLETED) {
             DebugRecordedAudioCard(
                 state = uiState.debugRecording,
+                recordedSession = uiState.recordedSession,
                 onPlay = onPlayDebugRecording,
                 onPause = onPauseDebugRecording,
                 onStop = onStopDebugRecording,
@@ -495,6 +497,7 @@ private fun FullScreenPracticePlayer(
 @Composable
 private fun DebugRecordedAudioCard(
     state: DebugRecordingPlaybackState,
+    recordedSession: RecordedSession?,
     onPlay: () -> Unit,
     onPause: () -> Unit,
     onStop: () -> Unit,
@@ -515,6 +518,29 @@ private fun DebugRecordedAudioCard(
                 text = state.filePath ?: "No finalized recording",
                 style = MaterialTheme.typography.bodySmall,
             )
+            recordedSession?.let { session ->
+                Text(
+                    text = buildString {
+                        appendLine("Sample rate: ${session.audioFormat.sampleRateHz} Hz")
+                        appendLine("Total frames: ${session.totalRecordedSampleFrames}")
+                        appendLine("Recording: ${session.recordingDurationMillis.toDebugTime()}")
+                        appendLine(
+                            "Initial count-in frames: ${session.initialCountInSampleFrames}",
+                        )
+                        appendLine(
+                            "Exercise start frame: ${session.exerciseStartSampleFrame}",
+                        )
+                        appendLine(
+                            "Graded frames: ${session.gradedExerciseSampleFrames}",
+                        )
+                        append(
+                            "Graded duration: " +
+                                session.gradedExerciseDurationMillis.toDebugTime(),
+                        )
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Row(
                 modifier = Modifier.fillMaxWidth(),

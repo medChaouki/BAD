@@ -10,13 +10,18 @@ class WavFileMetadataTest {
     @Test
     fun finalizedHeader_reportsActualPcmDuration() {
         val file = File(Files.createTempDirectory("bad-wav").toFile(), "test.wav")
-        val pcmByteCount = AudioRecordWavSessionRecorder.SAMPLE_RATE_HZ * 2
+        val format = PcmAudioFormat(
+            sampleRateHz = 44_100,
+            channelCount = 1,
+            encoding = PcmEncoding.SIGNED_16_BIT_LITTLE_ENDIAN,
+        )
+        val pcmByteCount = format.sampleRateHz * format.bytesPerFrame
         file.writeBytes(ByteArray(44 + pcmByteCount))
 
-        WavFileMetadata.finalizePcm16Mono(
+        WavFileMetadata.finalizePcm16(
             file = file,
             pcmByteCount = pcmByteCount.toLong(),
-            sampleRateHz = AudioRecordWavSessionRecorder.SAMPLE_RATE_HZ,
+            format = format,
         )
 
         assertEquals("RIFF", file.readBytes().copyOfRange(0, 4).toString(Charsets.US_ASCII))
@@ -24,4 +29,3 @@ class WavFileMetadataTest {
         assertTrue(file.length() == 44L + pcmByteCount)
     }
 }
-

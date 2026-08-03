@@ -12,7 +12,11 @@ class DebugRecordingPlaybackControllerTest {
     fun playbackState_coversReadyPlayingPausedCompletedAndStopped() {
         val player = FakeRecordedAudioPlayer(durationMillis = 1_250L)
         val controller = DebugRecordingPlaybackController(player)
-        val recording = recordingFile(durationMillis = 1_250L)
+        val recording = recordedSessionFile(
+            sampleRateHz = 1_000,
+            exerciseStartSampleFrame = 250L,
+            totalSampleFrames = 1_250L,
+        )
 
         assertEquals(DebugRecordingPlaybackPhase.UNAVAILABLE, controller.state.phase)
         controller.setRecording(recording)
@@ -43,7 +47,19 @@ class DebugRecordingPlaybackControllerTest {
         val controller = DebugRecordingPlaybackController(player)
         val missing = File(Files.createTempDirectory("bad-missing").toFile(), "missing.wav")
 
-        controller.setRecording(DebugRecording(missing.absolutePath, 100L))
+        controller.setRecording(
+            RecordedSession(
+                wavFilePath = missing.absolutePath,
+                audioFormat = PcmAudioFormat(
+                    sampleRateHz = 1_000,
+                    channelCount = 1,
+                    encoding = PcmEncoding.SIGNED_16_BIT_LITTLE_ENDIAN,
+                ),
+                totalRecordedSampleFrames = 100L,
+                exerciseStartSampleFrame = 50L,
+                runtimeExercise = runtimeExerciseForAudioTest(),
+            ),
+        )
 
         assertEquals(DebugRecordingPlaybackPhase.ERROR, controller.state.phase)
         assertFalse(controller.state.canPlay)
@@ -54,12 +70,12 @@ class DebugRecordingPlaybackControllerTest {
     @Test
     fun deleteRecording_removesFileAndDisablesControls() {
         val controller = DebugRecordingPlaybackController(FakeRecordedAudioPlayer())
-        val recording = recordingFile()
+        val recording = recordedSessionFile()
         controller.setRecording(recording)
 
         controller.deleteRecording()
 
-        assertFalse(File(recording.filePath).exists())
+        assertFalse(File(recording.wavFilePath).exists())
         assertEquals(DebugRecordingPlaybackPhase.UNAVAILABLE, controller.state.phase)
         assertFalse(controller.state.canPlay)
     }
@@ -69,17 +85,11 @@ class DebugRecordingPlaybackControllerTest {
         val player = FakeRecordedAudioPlayer(prepareFailure = true)
         val controller = DebugRecordingPlaybackController(player)
 
-        controller.setRecording(recordingFile())
+        controller.setRecording(recordedSessionFile())
         assertEquals(DebugRecordingPlaybackPhase.ERROR, controller.state.phase)
 
         controller.release()
         assertTrue(player.releaseCount > 0)
-    }
-
-    private fun recordingFile(durationMillis: Long = 1_000L): DebugRecording {
-        val file = File(Files.createTempDirectory("bad-recording").toFile(), "recording.wav")
-        file.writeBytes(byteArrayOf(1))
-        return DebugRecording(file.absolutePath, durationMillis)
     }
 
     private class FakeRecordedAudioPlayer(
@@ -109,4 +119,3 @@ class DebugRecordingPlaybackControllerTest {
         fun complete() = completion?.invoke() ?: Unit
     }
 }
-

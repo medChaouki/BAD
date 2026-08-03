@@ -28,8 +28,16 @@ class AudioRecordWavSessionRecorder(
     private var audioRecord: AudioRecord? = null
     private var captureThread: Thread? = null
     private val captureRequested = AtomicBoolean(false)
-    private var pcmByteCount = 0L
+    private val sampleWriteLock = Any()
+    @Volatile private var currentFormat: PcmAudioFormat? = null
+    private var writtenSampleFrames = 0L
     @Volatile private var captureFailure: Throwable? = null
+
+    override val format: PcmAudioFormat?
+        get() = currentFormat
+
+    override val totalWrittenSampleFrames: Long
+        get() = synchronized(sampleWriteLock) { writtenSampleFrames }
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     @Synchronized
@@ -39,12 +47,17 @@ class AudioRecordWavSessionRecorder(
             "Unable to create the recording directory."
         }
         recordingFile.delete()
-        output = BufferedOutputStream(FileOutputStream(partialFile)).also { stream ->
-            stream.write(ByteArray(WAV_HEADER_SIZE))
+        try {
+            output = BufferedOutputStream(FileOutputStream(partialFile)).also { stream ->
+                stream.write(ByteArray(WAV_HEADER_SIZE))
+            }
+            writtenSampleFrames = 0L
+            captureFailure = null
+            startCapture()
+        } catch (exception: Exception) {
+            cancel()
+            throw exception
         }
-        pcmByteCount = 0L
-        captureFailure = null
-        startCapture()
     }
 
     @Synchronized
@@ -56,34 +69,43 @@ class AudioRecordWavSessionRecorder(
     @Synchronized
     override fun resume() {
         check(output != null) { "No recording session is active." }
+        check(captureFailure == null) { "Microphone recording has already failed." }
         if (audioRecord == null) startCapture()
     }
 
     @Synchronized
-    override fun finish(): DebugRecording {
+    override fun finish(): FinalizedRecording {
         stopCapture()
         val failure = captureFailure
+        val completedFormat = checkNotNull(currentFormat) {
+            "Recording format is unavailable."
+        }
         output?.flush()
         output?.close()
         output = null
-        if (failure != null || pcmByteCount <= 0L) {
+        if (failure != null || writtenSampleFrames <= 0L) {
             partialFile.delete()
             throw IllegalStateException(
                 failure?.message ?: "Microphone recording did not contain audio.",
                 failure,
             )
         }
-        WavFileMetadata.finalizePcm16Mono(
+        val pcmByteCount = Math.multiplyExact(
+            writtenSampleFrames,
+            completedFormat.bytesPerFrame.toLong(),
+        )
+        WavFileMetadata.finalizePcm16(
             file = partialFile,
             pcmByteCount = pcmByteCount,
-            sampleRateHz = SAMPLE_RATE_HZ,
+            format = completedFormat,
         )
         check(partialFile.renameTo(recordingFile)) {
             "Unable to finalize the WAV recording."
         }
-        return DebugRecording(
+        return FinalizedRecording(
             filePath = recordingFile.absolutePath,
-            durationMillis = WavFileMetadata.readDurationMillis(recordingFile),
+            format = completedFormat,
+            totalSampleFrames = writtenSampleFrames,
         )
     }
 
@@ -93,7 +115,8 @@ class AudioRecordWavSessionRecorder(
         runCatching { output?.close() }
         output = null
         partialFile.delete()
-        pcmByteCount = 0L
+        currentFormat = null
+        writtenSampleFrames = 0L
         captureFailure = null
     }
 
@@ -103,52 +126,120 @@ class AudioRecordWavSessionRecorder(
 
     @SuppressLint("MissingPermission")
     private fun startCapture() {
-        val minimumBufferSize = AudioRecord.getMinBufferSize(
-            SAMPLE_RATE_HZ,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
+        val requiredFormat = currentFormat
+        val candidateSampleRates = requiredFormat?.let {
+            listOf(it.sampleRateHz)
+        } ?: SUPPORTED_SAMPLE_RATES
+        var selectedSetup: CaptureSetup? = null
+        var lastStartFailure: Exception? = null
+        candidateSampleRates.forEach { sampleRateHz ->
+            if (selectedSetup != null) return@forEach
+            val setup = createCaptureSetup(sampleRateHz) ?: return@forEach
+            if (requiredFormat != null && setup.format != requiredFormat) {
+                setup.recorder.release()
+                lastStartFailure = IllegalStateException(
+                    "Microphone format changed while resuming recording.",
+                )
+                return@forEach
+            }
+            captureRequested.set(true)
+            try {
+                setup.recorder.startRecording()
+                check(setup.recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    "Unable to start microphone recording."
+                }
+                selectedSetup = setup
+            } catch (exception: SecurityException) {
+                captureRequested.set(false)
+                setup.recorder.release()
+                throw exception
+            } catch (exception: Exception) {
+                captureRequested.set(false)
+                setup.recorder.release()
+                lastStartFailure = exception
+            }
+        }
+        val captureSetup = selectedSetup ?: throw IllegalStateException(
+            "Device does not support the required mono PCM microphone input.",
+            lastStartFailure,
         )
-        check(minimumBufferSize > 0) {
-            "Device does not support 48 kHz mono PCM microphone input."
-        }
-        val recorder = AudioRecord.Builder()
-            .setAudioSource(MediaRecorder.AudioSource.DEFAULT)
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(SAMPLE_RATE_HZ)
-                    .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-                    .build(),
-            )
-            .setBufferSizeInBytes(minimumBufferSize * 2)
-            .build()
-        check(recorder.state == AudioRecord.STATE_INITIALIZED) {
-            recorder.release()
-            "Unable to initialize microphone recording."
-        }
-        captureRequested.set(true)
-        recorder.startRecording()
-        check(recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-            captureRequested.set(false)
-            recorder.release()
-            "Unable to start microphone recording."
-        }
+        val recorder = captureSetup.recorder
+        currentFormat = captureSetup.format
         audioRecord = recorder
         captureThread = Thread(
-            { captureLoop(recorder, minimumBufferSize) },
+            { captureLoop(recorder, captureSetup.bufferSizeBytes, captureSetup.format) },
             CAPTURE_THREAD_NAME,
         ).also(Thread::start)
     }
 
-    private fun captureLoop(recorder: AudioRecord, bufferSize: Int) {
+    @SuppressLint("MissingPermission")
+    private fun createCaptureSetup(requestedSampleRateHz: Int): CaptureSetup? {
+        val minimumBufferSize = AudioRecord.getMinBufferSize(
+            requestedSampleRateHz,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+        )
+        if (minimumBufferSize <= 0) return null
+        val recorder = try {
+            AudioRecord.Builder()
+                .setAudioSource(MediaRecorder.AudioSource.DEFAULT)
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(requestedSampleRateHz)
+                        .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                        .build(),
+                )
+                .setBufferSizeInBytes(minimumBufferSize * BUFFER_SIZE_MULTIPLIER)
+                .build()
+        } catch (_: IllegalArgumentException) {
+            return null
+        } catch (_: UnsupportedOperationException) {
+            return null
+        }
+        if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+            recorder.release()
+            return null
+        }
+        val format = PcmAudioFormat(
+            sampleRateHz = recorder.sampleRate,
+            channelCount = recorder.channelCount,
+            encoding = PcmEncoding.SIGNED_16_BIT_LITTLE_ENDIAN,
+        )
+        if (format.channelCount != CHANNEL_COUNT) {
+            recorder.release()
+            return null
+        }
+        return CaptureSetup(
+            recorder = recorder,
+            bufferSizeBytes = minimumBufferSize * BUFFER_SIZE_MULTIPLIER,
+            format = format,
+        )
+    }
+
+    private fun captureLoop(
+        recorder: AudioRecord,
+        bufferSize: Int,
+        format: PcmAudioFormat,
+    ) {
         val buffer = ByteArray(bufferSize)
         try {
             while (captureRequested.get()) {
                 val bytesRead = recorder.read(buffer, 0, buffer.size)
                 when {
                     bytesRead > 0 -> {
-                        output?.write(buffer, 0, bytesRead)
-                        pcmByteCount += bytesRead
+                        check(bytesRead % format.bytesPerFrame == 0) {
+                            "Microphone returned an incomplete PCM sample frame."
+                        }
+                        synchronized(sampleWriteLock) {
+                            checkNotNull(output) {
+                                "Recording output closed while capture was active."
+                            }.write(buffer, 0, bytesRead)
+                            writtenSampleFrames = Math.addExact(
+                                writtenSampleFrames,
+                                bytesRead.toLong() / format.bytesPerFrame,
+                            )
+                        }
                     }
                     bytesRead < 0 && captureRequested.get() -> error(
                         "Microphone read failed with AudioRecord error $bytesRead.",
@@ -166,13 +257,34 @@ class AudioRecordWavSessionRecorder(
         audioRecord = null
         captureRequested.set(false)
         runCatching { recorder.stop() }
-        captureThread?.join(CAPTURE_STOP_TIMEOUT_MILLIS)
+            .onFailure { exception -> captureFailure = exception }
+        val thread = captureThread
+        thread?.join(CAPTURE_STOP_TIMEOUT_MILLIS)
+        if (thread?.isAlive == true) {
+            captureFailure = IllegalStateException(
+                "Microphone capture thread did not stop cleanly.",
+            )
+            thread.interrupt()
+        }
         captureThread = null
         recorder.release()
     }
 
+    private data class CaptureSetup(
+        val recorder: AudioRecord,
+        val bufferSizeBytes: Int,
+        val format: PcmAudioFormat,
+    )
+
     companion object {
-        const val SAMPLE_RATE_HZ = 48_000
+        const val PREFERRED_SAMPLE_RATE_HZ = 48_000
+        const val FALLBACK_SAMPLE_RATE_HZ = 44_100
+        private const val CHANNEL_COUNT = 1
+        private const val BUFFER_SIZE_MULTIPLIER = 2
+        private val SUPPORTED_SAMPLE_RATES = listOf(
+            PREFERRED_SAMPLE_RATE_HZ,
+            FALLBACK_SAMPLE_RATE_HZ,
+        )
         private const val RECORDINGS_DIRECTORY = "B.A.D/recordings"
         private const val PARTIAL_FILE_NAME = "debug-recording.partial"
         private const val RECORDING_FILE_NAME = "debug-recording.wav"
@@ -183,8 +295,12 @@ class AudioRecordWavSessionRecorder(
 }
 
 object WavFileMetadata {
-    fun finalizePcm16Mono(file: File, pcmByteCount: Long, sampleRateHz: Int) {
+    fun finalizePcm16(file: File, pcmByteCount: Long, format: PcmAudioFormat) {
+        require(format.encoding == PcmEncoding.SIGNED_16_BIT_LITTLE_ENDIAN)
         require(pcmByteCount in 1..(UInt.MAX_VALUE.toLong() - 36L))
+        require(pcmByteCount % format.bytesPerFrame == 0L) {
+            "PCM data must contain complete sample frames."
+        }
         RandomAccessFile(file, "rw").use { wav ->
             wav.seek(0)
             wav.writeAscii("RIFF")
@@ -192,11 +308,13 @@ object WavFileMetadata {
             wav.writeAscii("WAVEfmt ")
             wav.writeLittleEndianInt(16)
             wav.writeLittleEndianShort(1)
-            wav.writeLittleEndianShort(1)
-            wav.writeLittleEndianInt(sampleRateHz)
-            wav.writeLittleEndianInt(sampleRateHz * 2)
-            wav.writeLittleEndianShort(2)
-            wav.writeLittleEndianShort(16)
+            wav.writeLittleEndianShort(format.channelCount)
+            wav.writeLittleEndianInt(format.sampleRateHz)
+            wav.writeLittleEndianInt(
+                Math.multiplyExact(format.sampleRateHz, format.bytesPerFrame),
+            )
+            wav.writeLittleEndianShort(format.bytesPerFrame)
+            wav.writeLittleEndianShort(format.encoding.bitsPerSample)
             wav.writeAscii("data")
             wav.writeLittleEndianInt(pcmByteCount.toInt())
         }
@@ -204,12 +322,32 @@ object WavFileMetadata {
 
     fun readDurationMillis(file: File): Long = RandomAccessFile(file, "r").use { wav ->
         require(wav.length() >= 44L) { "WAV file is incomplete." }
+        wav.seek(22)
+        val channelCount = wav.readLittleEndianShort()
         wav.seek(24)
         val sampleRateHz = wav.readLittleEndianInt().toLong() and 0xffffffffL
+        wav.seek(34)
+        val bitsPerSample = wav.readLittleEndianShort()
         wav.seek(40)
         val pcmByteCount = wav.readLittleEndianInt().toLong() and 0xffffffffL
-        require(sampleRateHz > 0L) { "WAV sample rate is invalid." }
-        pcmByteCount * 1_000L / (sampleRateHz * 2L)
+        require(
+            sampleRateHz in 1L..Int.MAX_VALUE &&
+                channelCount > 0 &&
+                bitsPerSample > 0 &&
+                bitsPerSample % Byte.SIZE_BITS == 0,
+        ) {
+            "WAV audio format is invalid."
+        }
+        val bytesPerFrame = channelCount * (bitsPerSample / Byte.SIZE_BITS)
+        require(bytesPerFrame > 0) { "WAV frame size is invalid." }
+        require(pcmByteCount > 0L && pcmByteCount <= wav.length() - 44L) {
+            "WAV PCM data is missing or incomplete."
+        }
+        val sampleFrames = pcmByteCount / bytesPerFrame
+        SampleFrameTiming.sampleFramesToDurationNanos(
+            sampleFrames = sampleFrames,
+            sampleRateHz = sampleRateHz.toInt(),
+        ) / 1_000_000L
     }
 
     private fun RandomAccessFile.writeAscii(value: String) = write(value.toByteArray(Charsets.US_ASCII))
@@ -228,4 +366,6 @@ object WavFileMetadata {
             (readUnsignedByte() shl 8) or
             (readUnsignedByte() shl 16) or
             (readUnsignedByte() shl 24)
+    private fun RandomAccessFile.readLittleEndianShort(): Int =
+        readUnsignedByte() or (readUnsignedByte() shl 8)
 }
