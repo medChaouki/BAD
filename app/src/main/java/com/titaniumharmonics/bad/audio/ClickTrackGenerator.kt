@@ -2,17 +2,13 @@ package com.titaniumharmonics.bad.audio
 
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.timing.ExerciseTiming
-import kotlin.math.PI
 import kotlin.math.ceil
-import kotlin.math.exp
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 object ClickTrackGenerator {
     const val DEFAULT_SAMPLE_RATE_HZ = 48_000
     private const val MAX_BUFFER_BYTES = 16 * 1024 * 1024
     private const val BYTES_PER_SAMPLE = 2
-    private const val CLICK_DURATION_MILLIS = 25
 
     fun generate(
         exercise: RuntimeExercise,
@@ -119,25 +115,19 @@ object ClickTrackGenerator {
         isAccent: Boolean,
         sound: ClickSound,
     ) {
-        val clickSampleCount = sampleRateHz * CLICK_DURATION_MILLIS / 1_000
-        val profile = sound.profile(isAccent)
-
-        repeat(clickSampleCount) { clickSampleOffset ->
-            val destinationIndex = startSample + clickSampleOffset
-            if (destinationIndex >= samples.size) return
-
-            val timeSeconds = clickSampleOffset.toDouble() / sampleRateHz
-            val envelope = exp(-timeSeconds / profile.decayTimeSeconds)
-            val clickSample =
-                sin(2.0 * PI * profile.frequencyHz * timeSeconds) *
-                    envelope *
-                    profile.peakAmplitude *
-                    Short.MAX_VALUE
-            val mixedSample = samples[destinationIndex].toInt() + clickSample.roundToInt()
-            samples[destinationIndex] = mixedSample
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-                .toShort()
+        val clickSound = when (sound) {
+            ClickSound.COUNT_IN -> if (isAccent) {
+                SyntheticClickSound.COUNT_IN_ACCENT
+            } else {
+                SyntheticClickSound.COUNT_IN
+            }
+            ClickSound.EXERCISE -> if (isAccent) {
+                SyntheticClickSound.EXERCISE_ACCENT
+            } else {
+                SyntheticClickSound.EXERCISE
+            }
         }
+        SyntheticClickWaveform.mixInto(samples, startSample, clickSound, sampleRateHz)
     }
 
     private fun Long.toSampleIndex(sampleRateHz: Int): Int =
@@ -148,41 +138,7 @@ object ClickTrackGenerator {
         EXERCISE,
         ;
 
-        fun profile(isAccent: Boolean): ClickProfile = when (this) {
-            COUNT_IN -> if (isAccent) {
-                ClickProfile(
-                    frequencyHz = 2_400.0,
-                    peakAmplitude = 0.90,
-                    decayTimeSeconds = 0.008,
-                )
-            } else {
-                ClickProfile(
-                    frequencyHz = 1_900.0,
-                    peakAmplitude = 0.68,
-                    decayTimeSeconds = 0.006,
-                )
-            }
-            EXERCISE -> if (isAccent) {
-                ClickProfile(
-                    frequencyHz = 1_600.0,
-                    peakAmplitude = 0.85,
-                    decayTimeSeconds = 0.009,
-                )
-            } else {
-                ClickProfile(
-                    frequencyHz = 1_050.0,
-                    peakAmplitude = 0.58,
-                    decayTimeSeconds = 0.007,
-                )
-            }
-        }
     }
-
-    private data class ClickProfile(
-        val frequencyHz: Double,
-        val peakAmplitude: Double,
-        val decayTimeSeconds: Double,
-    )
 
     private const val NANOS_PER_SECOND = 1_000_000_000.0
 }

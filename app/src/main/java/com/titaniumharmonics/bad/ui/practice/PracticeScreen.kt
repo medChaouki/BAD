@@ -27,6 +27,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -52,6 +54,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -64,6 +67,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
 import com.titaniumharmonics.bad.BuildConfig
+import com.titaniumharmonics.bad.R
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
 import com.titaniumharmonics.bad.audio.RecordedSession
@@ -90,6 +94,7 @@ fun PracticeRoute(
     startAfterLoad: Boolean,
     onDocumentLoadConsumed: () -> Unit,
     fileOperationsEnabled: Boolean,
+    onOpenSettings: () -> Unit,
     viewModel: PracticeViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -203,6 +208,7 @@ fun PracticeRoute(
         onExportDebugCsv = {
             debugCsvLauncher.launch("bad-audio-analysis.csv")
         },
+        onOpenSettings = onOpenSettings,
     )
 }
 
@@ -239,6 +245,7 @@ fun PracticeScreen(
     onReplayDebugRecording: () -> Unit,
     onDeleteDebugRecording: () -> Unit,
     onExportDebugCsv: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val playbackExercise = uiState.playbackExercise
     var playbackSettingsExpanded by rememberSaveable(uiState.exercise?.id) {
@@ -270,6 +277,14 @@ fun PracticeScreen(
                         text = "B.A.D.",
                         fontWeight = FontWeight.Black,
                     )
+                },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_settings),
+                            contentDescription = "Settings",
+                        )
+                    }
                 },
             )
         },
@@ -464,6 +479,7 @@ private fun FullScreenPracticePlayer(
                     .align(Alignment.Center)
                     .padding(horizontal = 20.dp),
             )
+
         }
         Row(
             modifier = Modifier
@@ -1374,6 +1390,7 @@ private fun PracticeScreenPreview() {
             onReplayDebugRecording = {},
             onDeleteDebugRecording = {},
             onExportDebugCsv = {},
+            onOpenSettings = {},
         )
     }
 }

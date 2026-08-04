@@ -33,6 +33,7 @@ automatic hit detection is not implemented yet.
   practice sessions
 - Temporary debug-only in-app recording playback, position, and deletion
 - Temporary debug CSV export and synchronized envelope/noise-floor graph
+- User-triggered universal speaker-to-microphone timing calibration
 - Single-lane scrolling rhythm timeline
 - Static first-measure preview while an exercise is idle
 - BPM-scaled beat highlights at the judgement line
@@ -332,9 +333,57 @@ Leaving the Practice screen releases both capture and playback resources. The
 recording pipeline remains present in release builds, but this playback card is
 compiled behind `BuildConfig.DEBUG` and is not shown there.
 
-Current alignment is structural software sample alignment only. A later PR
-will calibrate the remaining device- and route-dependent input/output latency
-before exercise-relative samples are used for final hit judgements.
+Current practice recordings retain structural software sample alignment. The
+calibration below measures the remaining fixed phone audio-path offset; a later
+PR will apply it when detected hits are introduced.
+
+## Timing calibration
+
+The app opens the dedicated Timing Calibration flow automatically at launch
+when no valid calibration is stored. After that, a small gear icon opens
+Settings, where calibration can be viewed, reset, or run again manually.
+Version 1 stores one universal calibration value rather than separate device
+or route profiles.
+Calibration must use the phone speaker and built-in microphone with wired,
+Bluetooth, USB, HDMI, and other external audio devices disconnected. Android
+route APIs block known external routes; uncertain routing requires explicit
+user confirmation, and a harmful route change during capture cancels the run.
+
+Calibration records a deterministic five-second sequence containing eight
+synthetic clicks spaced 500 ms apart, with leading and trailing silence. The
+sequence is streamed through a bounded `AudioTrack` buffer for device
+compatibility. The click waveform is the same generator used by practice playback. Normalized
+cross-correlation locates each known waveform in the PCM recording. Matches
+must pass correlation, spacing, count, and offset-consistency checks; robust
+outliers are removed and the median remaining offset becomes the calibration.
+A measurable result is shown as a pending value and is not stored until the
+user explicitly accepts it. The user may also reject it. Measurable results
+that miss automatic consistency thresholds remain reviewable, while a run with
+no usable measurement fails without creating a candidate.
+
+The authoritative sign convention is:
+
+```text
+calibrationOffsetSamples = recordedClickSample - expectedClickSample
+```
+
+A positive value means the speaker click arrived later in the recorded PCM
+than its scheduled reference. Future onset processing will correct a raw hit
+with `rawExerciseRelativeHitSample - calibrationOffsetSamples`. When sample
+rates differ, the stored offset is converted by duration and rounded to the
+nearest sample, with exact half-sample ties rounded away from zero.
+
+An accepted offset, capture sample rate, confidence, match counts, spread,
+timestamp, and algorithm version are stored locally in app preferences.
+Rejecting or failing a recalibration never replaces the previous valid value;
+reset removes it. Debug builds retain the temporary WAV and show playback, the recorded
+waveform, expected and detected click markers, individual correlations, and
+offsets. Release builds delete the temporary recording.
+
+This universal value corrects the tested phone-speaker/built-in-microphone
+pipeline only. Bluetooth and other routes can introduce different additional
+latency during practice. Drum onset detection and application of calibration
+to detected hits belong to the next PR.
 
 When microphone detection and hit matching are added, timing feedback will use
 a green ring for on-time hits, a blue ring for early hits, and a red ring for

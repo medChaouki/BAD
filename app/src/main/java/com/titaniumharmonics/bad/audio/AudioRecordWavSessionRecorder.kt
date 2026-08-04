@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioFormat
+import android.media.AudioDeviceInfo
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Environment
@@ -16,13 +17,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class AudioRecordWavSessionRecorder(
     context: Context,
+    recordingsDirectoryName: String = RECORDINGS_DIRECTORY,
+    partialFileName: String = PARTIAL_FILE_NAME,
+    recordingFileName: String = RECORDING_FILE_NAME,
+    private val preferredInputDevice: AudioDeviceInfo? = null,
 ) : SessionAudioRecorder {
     private val recordingsDirectory = File(
         context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: context.filesDir,
-        RECORDINGS_DIRECTORY,
+        recordingsDirectoryName,
     )
-    private val partialFile = File(recordingsDirectory, PARTIAL_FILE_NAME)
-    private val recordingFile = File(recordingsDirectory, RECORDING_FILE_NAME)
+    private val partialFile = File(recordingsDirectory, partialFileName)
+    private val recordingFile = File(recordingsDirectory, recordingFileName)
 
     private var output: BufferedOutputStream? = null
     private var audioRecord: AudioRecord? = null
@@ -124,6 +129,8 @@ class AudioRecordWavSessionRecorder(
         cancel()
     }
 
+    fun routedDeviceType(): Int? = audioRecord?.routedDevice?.type
+
     @SuppressLint("MissingPermission")
     private fun startCapture() {
         val requiredFormat = currentFormat
@@ -198,6 +205,10 @@ class AudioRecordWavSessionRecorder(
             return null
         }
         if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+            recorder.release()
+            return null
+        }
+        if (preferredInputDevice != null && !recorder.setPreferredDevice(preferredInputDevice)) {
             recorder.release()
             return null
         }
@@ -285,9 +296,9 @@ class AudioRecordWavSessionRecorder(
             PREFERRED_SAMPLE_RATE_HZ,
             FALLBACK_SAMPLE_RATE_HZ,
         )
-        private const val RECORDINGS_DIRECTORY = "B.A.D/recordings"
-        private const val PARTIAL_FILE_NAME = "debug-recording.partial"
-        private const val RECORDING_FILE_NAME = "debug-recording.wav"
+        const val RECORDINGS_DIRECTORY = "B.A.D/recordings"
+        const val PARTIAL_FILE_NAME = "debug-recording.partial"
+        const val RECORDING_FILE_NAME = "debug-recording.wav"
         private const val WAV_HEADER_SIZE = 44
         private const val CAPTURE_THREAD_NAME = "BAD microphone capture"
         private const val CAPTURE_STOP_TIMEOUT_MILLIS = 1_000L

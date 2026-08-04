@@ -8,6 +8,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.titaniumharmonics.bad.ui.editor.ExerciseEditorRoute
 import com.titaniumharmonics.bad.ui.library.ExerciseLibraryRoute
 import com.titaniumharmonics.bad.ui.practice.PracticeRoute
+import com.titaniumharmonics.bad.ui.calibration.TimingCalibrationRoute
+import com.titaniumharmonics.bad.ui.settings.SettingsRoute
 
 @Composable
 fun BadApp(
@@ -29,6 +31,7 @@ fun BadApp(
                 startAfterLoad = uiState.startPracticeAfterLoad,
                 onDocumentLoadConsumed = viewModel::consumePracticeDocumentToLoad,
                 fileOperationsEnabled = uiState.storageInitializationComplete,
+                onOpenSettings = viewModel::openSettings,
             )
         }
         AppDestination.EXERCISE_LIBRARY -> {
@@ -45,6 +48,19 @@ fun BadApp(
                 defaultExerciseFolderUri = uiState.defaultExerciseFolderUri,
                 onNavigateBack = viewModel::navigateBack,
                 onPlayExercise = viewModel::playEditorExercise,
+            )
+        }
+        AppDestination.SETTINGS -> {
+            SettingsRoute(
+                activeTimingCalibration = uiState.activeTimingCalibration,
+                onOpenTimingCalibration = viewModel::openTimingCalibration,
+                onNavigateBack = viewModel::navigateBack,
+            )
+        }
+        AppDestination.TIMING_CALIBRATION -> {
+            TimingCalibrationRoute(
+                onNavigateBack = viewModel::navigateBack,
+                onCalibrationChanged = viewModel::timingCalibrationChanged,
             )
         }
     }
