@@ -1,5 +1,9 @@
 package com.titaniumharmonics.bad.ui.practice
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -22,6 +27,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -32,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,10 +48,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -52,6 +64,19 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.platform.LocalContext
+import com.titaniumharmonics.bad.BuildConfig
+import com.titaniumharmonics.bad.R
+import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
+import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
+import com.titaniumharmonics.bad.audio.RecordedSession
+import com.titaniumharmonics.bad.audio.SampleFrameTiming
+import com.titaniumharmonics.bad.audio.analysis.AudioAnalysis
+import com.titaniumharmonics.bad.audio.analysis.AudioAnalysisState
+import com.titaniumharmonics.bad.audio.analysis.DebugAnalysisTimeline
+import com.titaniumharmonics.bad.audio.analysis.DebugCsvExportState
+import com.titaniumharmonics.bad.audio.analysis.PeakPreservingGraphDownsampler
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.exercise.RuntimeExpectedNote
@@ -70,25 +95,77 @@ fun PracticeRoute(
     startAfterLoad: Boolean,
     onDocumentLoadConsumed: () -> Unit,
     fileOperationsEnabled: Boolean,
+    onOpenSettings: () -> Unit,
     viewModel: PracticeViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+    var startAfterPermissionGrant by rememberSaveable { mutableStateOf(false) }
+    var startWhenExerciseIsReady by rememberSaveable { mutableStateOf(false) }
+    var permissionRequestInFlight by remember { mutableStateOf(false) }
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        permissionRequestInFlight = false
+        if (granted && startAfterPermissionGrant) {
+            viewModel.startPlayback()
+        } else if (!granted) {
+            viewModel.onMicrophonePermissionDenied()
+        }
+        startAfterPermissionGrant = false
+    }
+    val debugCsvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri ->
+        uri?.let { viewModel.exportDebugAnalysisCsv(it.toString()) }
+    }
+    val requestSessionStart = {
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO,
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            viewModel.startPlayback()
+        } else {
+            startAfterPermissionGrant = true
+            if (!permissionRequestInFlight) {
+                permissionRequestInFlight = true
+                microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionRequestInFlight = true
+            microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
 
     LaunchedEffect(documentUriToLoad, startAfterLoad) {
         documentUriToLoad?.let { documentUri ->
-            viewModel.loadExercise(
-                documentUri = documentUri,
-                startAfterLoad = startAfterLoad,
-            )
+            startWhenExerciseIsReady = startAfterLoad
+            viewModel.loadExercise(documentUri)
             onDocumentLoadConsumed()
+        }
+    }
+
+    LaunchedEffect(uiState.phase, startWhenExerciseIsReady) {
+        if (startWhenExerciseIsReady && uiState.phase == PracticePhase.READY) {
+            startWhenExerciseIsReady = false
+            requestSessionStart()
         }
     }
 
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                viewModel.stopPlayback()
+                viewModel.releaseAudioResources()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -114,17 +191,25 @@ fun PracticeRoute(
         onLoad = onLoadExercise,
         fileOperationsEnabled = fileOperationsEnabled,
         onUnload = viewModel::unloadExercise,
-        onStart = viewModel::startPlayback,
+        onStart = requestSessionStart,
         onStop = viewModel::stopPlayback,
         onPause = viewModel::pausePlayback,
         onResume = viewModel::resumePlayback,
         onRepeat = viewModel::restartPlayback,
         onDecreaseTempo = viewModel::decreaseTempo,
         onIncreaseTempo = viewModel::increaseTempo,
-        onCountInEnabledChange = viewModel::setCountInEnabled,
         onDownbeatsOnlyChange = viewModel::setDownbeatsOnly,
         onDecreaseMeasureCount = viewModel::decreaseMeasureCount,
         onIncreaseMeasureCount = viewModel::increaseMeasureCount,
+        onPlayDebugRecording = viewModel::playDebugRecording,
+        onPauseDebugRecording = viewModel::pauseDebugRecording,
+        onStopDebugRecording = viewModel::stopDebugRecording,
+        onReplayDebugRecording = viewModel::replayDebugRecording,
+        onDeleteDebugRecording = viewModel::deleteDebugRecording,
+        onExportDebugCsv = {
+            debugCsvLauncher.launch("bad-audio-analysis.csv")
+        },
+        onOpenSettings = onOpenSettings,
     )
 }
 
@@ -152,10 +237,16 @@ fun PracticeScreen(
     onRepeat: () -> Unit,
     onDecreaseTempo: () -> Unit,
     onIncreaseTempo: () -> Unit,
-    onCountInEnabledChange: (Boolean) -> Unit,
     onDownbeatsOnlyChange: (Boolean) -> Unit,
     onDecreaseMeasureCount: () -> Unit,
     onIncreaseMeasureCount: () -> Unit,
+    onPlayDebugRecording: () -> Unit,
+    onPauseDebugRecording: () -> Unit,
+    onStopDebugRecording: () -> Unit,
+    onReplayDebugRecording: () -> Unit,
+    onDeleteDebugRecording: () -> Unit,
+    onExportDebugCsv: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val playbackExercise = uiState.playbackExercise
     var playbackSettingsExpanded by rememberSaveable(uiState.exercise?.id) {
@@ -169,6 +260,12 @@ fun PracticeScreen(
             onResume = onResume,
             onRepeat = onRepeat,
             onStop = onStop,
+            onPlayDebugRecording = onPlayDebugRecording,
+            onPauseDebugRecording = onPauseDebugRecording,
+            onStopDebugRecording = onStopDebugRecording,
+            onReplayDebugRecording = onReplayDebugRecording,
+            onDeleteDebugRecording = onDeleteDebugRecording,
+            onExportDebugCsv = onExportDebugCsv,
         )
         return
     }
@@ -181,6 +278,14 @@ fun PracticeScreen(
                         text = "B.A.D.",
                         fontWeight = FontWeight.Black,
                     )
+                },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_settings),
+                            contentDescription = "Settings",
+                        )
+                    }
                 },
             )
         },
@@ -251,7 +356,6 @@ fun PracticeScreen(
                             ),
                             onDecreaseTempo = onDecreaseTempo,
                             onIncreaseTempo = onIncreaseTempo,
-                            onCountInEnabledChange = onCountInEnabledChange,
                             onDownbeatsOnlyChange = onDownbeatsOnlyChange,
                             onDecreaseMeasureCount = onDecreaseMeasureCount,
                             onIncreaseMeasureCount = onIncreaseMeasureCount,
@@ -286,15 +390,17 @@ private fun FullScreenPracticePlayer(
     onResume: () -> Unit,
     onRepeat: () -> Unit,
     onStop: () -> Unit,
+    onPlayDebugRecording: () -> Unit,
+    onPauseDebugRecording: () -> Unit,
+    onStopDebugRecording: () -> Unit,
+    onReplayDebugRecording: () -> Unit,
+    onDeleteDebugRecording: () -> Unit,
+    onExportDebugCsv: () -> Unit,
 ) {
     val timing = remember(exercise) { ExerciseTiming(exercise) }
     val timelineElapsedNanos = when (uiState.phase) {
         PracticePhase.PREPARING -> {
-            if (exercise.countInMeasures > 0) {
-                -timing.quarterNoteDurationNanos
-            } else {
-                0L
-            }
+            -timing.quarterNoteDurationNanos
         }
         PracticePhase.COUNTING_IN -> {
             uiState.exerciseElapsedNanos.coerceAtLeast(
@@ -358,6 +464,24 @@ private fun FullScreenPracticePlayer(
                 )
             }
         }
+        if (BuildConfig.DEBUG && uiState.phase == PracticePhase.COMPLETED) {
+            DebugRecordedAudioCard(
+                state = uiState.debugRecording,
+                recordedSession = uiState.recordedSession,
+                analysisState = uiState.audioAnalysis,
+                csvExportState = uiState.debugCsvExport,
+                onPlay = onPlayDebugRecording,
+                onPause = onPauseDebugRecording,
+                onStop = onStopDebugRecording,
+                onReplay = onReplayDebugRecording,
+                onDelete = onDeleteDebugRecording,
+                onExportCsv = onExportDebugCsv,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 20.dp),
+            )
+
+        }
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -412,12 +536,345 @@ private fun FullScreenPracticePlayer(
 }
 
 @Composable
+private fun DebugRecordedAudioCard(
+    state: DebugRecordingPlaybackState,
+    recordedSession: RecordedSession?,
+    analysisState: AudioAnalysisState,
+    csvExportState: DebugCsvExportState,
+    onPlay: () -> Unit,
+    onPause: () -> Unit,
+    onStop: () -> Unit,
+    onReplay: () -> Unit,
+    onDelete: () -> Unit,
+    onExportCsv: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .heightIn(max = 580.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Debug: Recorded Audio", fontWeight = FontWeight.Bold)
+            Text(
+                "${state.positionMillis.toDebugTime()} / ${state.durationMillis.toDebugTime()}",
+            )
+            Text(
+                text = state.filePath ?: "No finalized recording",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            recordedSession?.let { session ->
+                Text(
+                    text = buildString {
+                        appendLine("Sample rate: ${session.audioFormat.sampleRateHz} Hz")
+                        appendLine("Total frames: ${session.totalRecordedSampleFrames}")
+                        appendLine("Recording: ${session.recordingDurationMillis.toDebugTime()}")
+                        appendLine(
+                            "Initial count-in frames: ${session.initialCountInSampleFrames}",
+                        )
+                        appendLine(
+                            "Exercise start frame: ${session.exerciseStartSampleFrame}",
+                        )
+                        appendLine(
+                            "Graded frames: ${session.gradedExerciseSampleFrames}",
+                        )
+                        append(
+                            "Graded duration: " +
+                                session.gradedExerciseDurationMillis.toDebugTime(),
+                        )
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            DebugAnalysisSection(
+                session = recordedSession,
+                analysisState = analysisState,
+                playbackState = state,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(onClick = onPlay, enabled = state.canPlay, modifier = Modifier.weight(1f)) {
+                    Text("Play")
+                }
+                Button(
+                    onClick = onPause,
+                    enabled = state.phase == DebugRecordingPlaybackPhase.PLAYING,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Pause") }
+                OutlinedButton(
+                    onClick = onStop,
+                    enabled = state.phase in setOf(
+                        DebugRecordingPlaybackPhase.PLAYING,
+                        DebugRecordingPlaybackPhase.PAUSED,
+                        DebugRecordingPlaybackPhase.COMPLETED,
+                    ),
+                    modifier = Modifier.weight(1f),
+                ) { Text("Stop") }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onReplay,
+                    enabled = state.filePath != null,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Replay") }
+                OutlinedButton(
+                    onClick = onDelete,
+                    enabled = state.filePath != null,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Delete") }
+                OutlinedButton(
+                    onClick = onExportCsv,
+                    enabled = analysisState is AudioAnalysisState.Ready &&
+                        csvExportState !is DebugCsvExportState.Exporting,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Export CSV") }
+            }
+            when (csvExportState) {
+                DebugCsvExportState.NotStarted -> Unit
+                DebugCsvExportState.Exporting -> Text("Exporting temporary debug CSV…")
+                is DebugCsvExportState.Exported -> Text(csvExportState.message)
+                is DebugCsvExportState.Failed -> Text(
+                    csvExportState.message,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebugAnalysisSection(
+    session: RecordedSession?,
+    analysisState: AudioAnalysisState,
+    playbackState: DebugRecordingPlaybackState,
+) {
+    Text("Offline analysis", fontWeight = FontWeight.Bold)
+    when (analysisState) {
+        AudioAnalysisState.NotStarted -> Text("Not started")
+        AudioAnalysisState.Processing -> Text("Processing…")
+        is AudioAnalysisState.Failed -> {
+            Text(
+                "Graph unavailable: ${analysisState.message}",
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text("Recorded WAV playback remains available.")
+        }
+        is AudioAnalysisState.Ready -> {
+            val analysis = analysisState.analysis
+            Text(
+                text = buildString {
+                    appendLine("Ready · ${analysis.sampleRateHz} Hz")
+                    appendLine("Graded samples: ${analysis.gradedSampleFrameCount}")
+                    appendLine("Frames: ${analysis.frameCount}")
+                    appendLine(
+                        "Frame / hop: ${analysis.configuration.frameDurationMillis} / " +
+                            "${analysis.configuration.hopDurationMillis} ms",
+                    )
+                    appendLine("Maximum input: ${analysis.maximumNormalizedInputAmplitude}")
+                    appendLine("Maximum frame peak: ${analysis.maximumFramePeak}")
+                    appendLine("Maximum envelope: ${analysis.maximumEnvelope}")
+                    appendLine(
+                        "Notch: ${if (analysis.metronomeConfiguration.notch.enabled) "On" else "Off"} · " +
+                            "${analysis.metronomeConfiguration.notch.centerFrequencyHz} Hz · " +
+                            "Q ${analysis.metronomeConfiguration.notch.qFactor}",
+                    )
+                    appendLine("Maximum suppression: ${analysis.maximumMetronomeSuppression}")
+                    append("Mean noise floor: ${analysis.meanNoiseFloor}")
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (session != null) {
+                DebugEnvelopeGraph(
+                    session = session,
+                    analysis = analysis,
+                    playbackState = playbackState,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebugEnvelopeGraph(
+    session: RecordedSession,
+    analysis: AudioAnalysis,
+    playbackState: DebugRecordingPlaybackState,
+) {
+    val timeline = remember(session) { DebugAnalysisTimeline(session) }
+    var graphWidthPixels by remember(analysis) { mutableIntStateOf(0) }
+    val maximumPointCount = (graphWidthPixels * GRAPH_POINTS_PER_PIXEL)
+        .coerceIn(MINIMUM_DEBUG_GRAPH_POINTS, MAXIMUM_DEBUG_GRAPH_POINTS)
+    val graph = remember(analysis, maximumPointCount) {
+        PeakPreservingGraphDownsampler.downsample(
+            analysis = analysis,
+            maximumPointCount = maximumPointCount,
+        )
+    }
+    val expectedMetronomeSamples = remember(session, analysis) {
+        expectedMetronomeRecordingSamples(session, analysis)
+    }
+    val cursor = timeline.cursor(playbackState)
+    val countInColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    val preNotchColor = MaterialTheme.colorScheme.outline
+    val postNotchColor = MaterialTheme.colorScheme.primary
+    val noiseColor = MaterialTheme.colorScheme.tertiary
+    val expectedBeatColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    val cursorColor = MaterialTheme.colorScheme.error
+    val boundaryColor = MaterialTheme.colorScheme.onSurface
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "Dashed pre-notch · Solid post-notch · Thin noise floor · Beat markers",
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .onSizeChanged { graphWidthPixels = it.width }
+                .background(MaterialTheme.colorScheme.surface),
+        ) {
+            val plotHeight = size.height
+            val boundaryX = size.width * timeline.exerciseStartNormalizedPosition
+            drawRect(countInColor, size = androidx.compose.ui.geometry.Size(boundaryX, size.height))
+
+            fun graphY(value: Float): Float =
+                plotHeight - (value / graph.maximumValue).coerceIn(0.0f, 1.0f) * plotHeight
+
+            val preNotchPath = Path()
+            val postNotchPath = Path()
+            val noisePath = Path()
+            graph.points.forEachIndexed { index, point ->
+                val x = size.width * timeline.normalizedWavPositionForExerciseSample(
+                    point.exerciseSampleFrame,
+                )
+                val preNotchY = graphY(point.preNotchEnvelope)
+                val postNotchY = graphY(point.postNotchEnvelope)
+                val noiseY = graphY(point.noiseFloor)
+                if (index == 0) {
+                    preNotchPath.moveTo(x, preNotchY)
+                    postNotchPath.moveTo(x, postNotchY)
+                    noisePath.moveTo(x, noiseY)
+                } else {
+                    preNotchPath.lineTo(x, preNotchY)
+                    postNotchPath.lineTo(x, postNotchY)
+                    noisePath.lineTo(x, noiseY)
+                }
+            }
+            expectedMetronomeSamples.forEach { sampleFrame ->
+                val x = size.width * sampleFrame.toFloat() / session.totalRecordedSampleFrames
+                drawLine(
+                    color = expectedBeatColor,
+                    start = Offset(x, 0.0f),
+                    end = Offset(x, size.height),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.0f, 5.0f)),
+                )
+            }
+            drawPath(
+                preNotchPath,
+                preNotchColor,
+                style = Stroke(
+                    width = 2.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.0f, 5.0f)),
+                ),
+            )
+            drawPath(postNotchPath, postNotchColor, style = Stroke(width = 3.dp.toPx()))
+            drawPath(noisePath, noiseColor, style = Stroke(width = 2.dp.toPx()))
+            drawLine(
+                color = boundaryColor,
+                start = Offset(boundaryX, 0.0f),
+                end = Offset(boundaryX, size.height),
+                strokeWidth = 2.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.0f, 8.0f)),
+            )
+            val cursorX = size.width * cursor.normalizedWavPosition
+            drawLine(
+                color = cursorColor,
+                start = Offset(cursorX, 0.0f),
+                end = Offset(cursorX, size.height),
+                strokeWidth = 3.dp.toPx(),
+            )
+        }
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "-${timeline.countInDurationMillis.roundToInt()} ms",
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.align(Alignment.CenterStart),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(timeline.exerciseStartNormalizedPosition)
+                    .align(Alignment.CenterStart),
+            ) {
+                Text(
+                    "0 ms",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
+            }
+            Text(
+                "+${session.gradedExerciseDurationMillis} ms",
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+        Text(
+            "Envelope: solid · Noise floor: thin · Exercise start: dashed · Cursor: thick",
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
+
+private fun expectedMetronomeRecordingSamples(
+    session: RecordedSession,
+    analysis: AudioAnalysis,
+): LongArray {
+    val timing = ExerciseTiming(session.runtimeExercise)
+    val countInStart = (
+        session.exerciseStartSampleFrame -
+            SampleFrameTiming.durationNanosToSampleFrames(
+                timing.countInDurationNanos,
+                session.audioFormat.sampleRateHz,
+            )
+        ).coerceAtLeast(0L)
+    val countIn = LongArray(timing.countInQuarterNoteCount) { index ->
+        countInStart + SampleFrameTiming.durationNanosToSampleFrames(
+            index * timing.beatDurationNanos,
+            session.audioFormat.sampleRateHz,
+        )
+    }
+    val exercise = LongArray(analysis.expectedMetronomeExerciseSamples.size) { index ->
+        session.exerciseRelativeSampleToRecordingSample(
+            analysis.expectedMetronomeExerciseSamples[index],
+        )
+    }
+    return countIn + exercise
+}
+
+private const val MAXIMUM_DEBUG_GRAPH_POINTS = 1_500
+private const val MINIMUM_DEBUG_GRAPH_POINTS = 100
+private const val GRAPH_POINTS_PER_PIXEL = 2
+
+private fun Long.toDebugTime(): String {
+    val totalSeconds = (this / 1_000L).coerceAtLeast(0L)
+    return "%d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
+}
+
+@Composable
 private fun PlaybackSettingsCard(
     settings: ExercisePlaybackSettings,
     enabled: Boolean,
     onDecreaseTempo: () -> Unit,
     onIncreaseTempo: () -> Unit,
-    onCountInEnabledChange: (Boolean) -> Unit,
     onDownbeatsOnlyChange: (Boolean) -> Unit,
     onDecreaseMeasureCount: () -> Unit,
     onIncreaseMeasureCount: () -> Unit,
@@ -447,28 +904,6 @@ private fun PlaybackSettingsCard(
                 onDecrease = onDecreaseTempo,
                 onIncrease = onIncreaseTempo,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Count-in",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Text(
-                        text = if (settings.countInEnabled) "Enabled" else "Disabled",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = settings.countInEnabled,
-                    onCheckedChange = onCountInEnabledChange,
-                    enabled = enabled,
-                )
-            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -969,7 +1404,6 @@ private fun PracticeScreenPreview() {
         description = "Four measures of quarter notes.",
         tempoBpm = 100.0,
         timeSignature = TimeSignature(4, 4),
-        countInMeasures = 1,
         ticksPerQuarterNote = 480,
         measures = List(4) { measureIndex ->
             val measureStartTick = measureIndex * 1_920L
@@ -1010,10 +1444,16 @@ private fun PracticeScreenPreview() {
             onRepeat = {},
             onDecreaseTempo = {},
             onIncreaseTempo = {},
-            onCountInEnabledChange = {},
             onDownbeatsOnlyChange = {},
             onDecreaseMeasureCount = {},
             onIncreaseMeasureCount = {},
+            onPlayDebugRecording = {},
+            onPauseDebugRecording = {},
+            onStopDebugRecording = {},
+            onReplayDebugRecording = {},
+            onDeleteDebugRecording = {},
+            onExportDebugCsv = {},
+            onOpenSettings = {},
         )
     }
 }

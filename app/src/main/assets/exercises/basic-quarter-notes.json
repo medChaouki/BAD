@@ -1,6 +1,6 @@
 {
   "fileType": "bad-exercise",
-  "formatVersion": 1,
+    "formatVersion": 2,
     "id": "basic-quarter-notes",
     "name": "Quarter Note Inspection",
     "description": "Four measures of quarter notes.",
@@ -9,7 +9,6 @@
         "numerator": 4,
         "denominator": 4
     },
-    "countInMeasures": 1,
     "measureCount": 4,
     "ticksPerQuarterNote": 480,
     "measureSubdivisions": [

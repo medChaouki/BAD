@@ -77,7 +77,9 @@ class ExerciseStorageInitializer(
 
         try {
             contentResolver.openOutputStream(sampleUri, "w")?.use { outputStream ->
-                context.assets.open("$ASSET_DIRECTORY/$SAMPLE_FILE_NAME").use { inputStream ->
+                context.assets.open(
+                    "$ASSET_DIRECTORY/$SAMPLE_ASSET_FILE_NAME",
+                ).use { inputStream ->
                     inputStream.copyTo(outputStream)
                 }
             } ?: throw IllegalStateException("Unable to write the default exercise file.")
@@ -106,7 +108,9 @@ class ExerciseStorageInitializer(
 
         val sampleFile = File(exerciseDirectory, SAMPLE_FILE_NAME)
         if (shouldSeedSample && !sampleFile.exists()) {
-            context.assets.open("$ASSET_DIRECTORY/$SAMPLE_FILE_NAME").use { inputStream ->
+            context.assets.open(
+                "$ASSET_DIRECTORY/$SAMPLE_ASSET_FILE_NAME",
+            ).use { inputStream ->
                 sampleFile.outputStream().use { outputStream ->
                     inputStream.copyTo(outputStream)
                 }
@@ -124,7 +128,8 @@ class ExerciseStorageInitializer(
 
     internal companion object {
         const val ASSET_DIRECTORY = "exercises"
-        const val SAMPLE_FILE_NAME = "basic-quarter-notes.json"
+        const val SAMPLE_FILE_NAME = "basic-quarter-notes-v2.json"
+        private const val SAMPLE_ASSET_FILE_NAME = "basic-quarter-notes.json"
         const val EXERCISE_MIME_TYPE = "application/json"
         const val SHARED_RELATIVE_PATH = "Download/B.A.D/assets/"
         const val SHARED_FOLDER_DOCUMENT_PATH = "Download/B.A.D/assets"
@@ -133,6 +138,6 @@ class ExerciseStorageInitializer(
             "com.android.externalstorage.documents"
         const val PRIMARY_STORAGE_DOCUMENT_ID = "primary"
         private const val STORAGE_PREFERENCES_NAME = "exercise_storage"
-        private const val SAMPLE_SEEDED_KEY = "sample_seeded"
+        private const val SAMPLE_SEEDED_KEY = "sample_seeded_v2"
     }
 }

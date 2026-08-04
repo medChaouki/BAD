@@ -6,6 +6,7 @@ import android.media.AudioTrack
 import android.util.Log
 import androidx.annotation.WorkerThread
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
+import com.titaniumharmonics.bad.audio.metronome.MetronomeConfiguration
 import com.titaniumharmonics.bad.timing.MonotonicClock
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.LockSupport
@@ -22,6 +23,7 @@ class AudioTrackMetronome(
     override fun start(
         exercise: RuntimeExercise,
         downbeatsOnly: Boolean,
+        configuration: MetronomeConfiguration,
     ): Long {
         stop()
 
@@ -40,6 +42,7 @@ class AudioTrackMetronome(
             exercise = exercise,
             sampleRateHz = sampleRateHz,
             downbeatsOnly = downbeatsOnly,
+            configuration = configuration,
         )
         val track = AudioTrack.Builder()
             .setAudioAttributes(
@@ -126,7 +129,10 @@ class AudioTrackMetronome(
 
     @WorkerThread
     @Synchronized
-    override fun startResumeCountIn(exercise: RuntimeExercise): Long {
+    override fun startResumeCountIn(
+        exercise: RuntimeExercise,
+        configuration: MetronomeConfiguration,
+    ): Long {
         val playback = checkNotNull(activePlayback) {
             "Cannot start a resume count-in without active playback."
         }
@@ -139,6 +145,7 @@ class AudioTrackMetronome(
         val samples = ClickTrackGenerator.generateCountIn(
             exercise = exercise,
             sampleRateHz = sampleRateHz,
+            configuration = configuration,
         )
         val minimumBufferSizeBytes = AudioTrack.getMinBufferSize(
             sampleRateHz,

@@ -3,8 +3,22 @@ package com.titaniumharmonics.bad.ui.practice
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.core.net.toUri
 import com.titaniumharmonics.bad.audio.AudioTrackMetronome
+import com.titaniumharmonics.bad.audio.AudioRecordWavSessionRecorder
+import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackController
+import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
+import com.titaniumharmonics.bad.audio.MediaPlayerRecordedAudioPlayer
+import com.titaniumharmonics.bad.audio.PracticeRecordingCoordinator
+import com.titaniumharmonics.bad.audio.PracticeRecordingPhase
 import com.titaniumharmonics.bad.audio.MetronomePlayer
+import com.titaniumharmonics.bad.audio.analysis.AudioAnalysisState
+import com.titaniumharmonics.bad.audio.analysis.DebugAudioAnalysisCsvExporter
+import com.titaniumharmonics.bad.audio.analysis.DebugCsvExportState
+import com.titaniumharmonics.bad.audio.analysis.OfflineAudioAnalyzer
+import com.titaniumharmonics.bad.audio.metronome.MetronomeConfigurationRepository
+import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
+import com.titaniumharmonics.bad.audio.metronome.SharedPreferencesMetronomeConfigurationStore
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseCompilationResult
 import com.titaniumharmonics.bad.exercise.ExerciseCompiler
@@ -27,8 +41,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import kotlin.math.ceil
 
 class PracticeViewModel(
@@ -39,21 +55,51 @@ class PracticeViewModel(
         ContentResolverExerciseDocumentStore(application.contentResolver)
     private val metronomePlayer: MetronomePlayer = AudioTrackMetronome(clock)
     private val sessionElapsedClock = SessionElapsedClock(clock)
+    private val metronomeConfigurationRepository = MetronomeConfigurationRepository(
+        SharedPreferencesMetronomeConfigurationStore(application),
+    )
 
     private val mutableUiState = MutableStateFlow(PracticeUiState())
     val uiState: StateFlow<PracticeUiState> = mutableUiState.asStateFlow()
+    private val sessionAudioRecorder = AudioRecordWavSessionRecorder(application)
+    private val debugRecordingController = DebugRecordingPlaybackController(
+        player = MediaPlayerRecordedAudioPlayer(),
+        onStateChanged = { debugState ->
+            val state = mutableUiState.value
+            val completedSession = state.recordedSession?.takeIf {
+                File(it.wavFilePath).isFile
+            }
+            mutableUiState.value = state.copy(
+                recordedSession = completedSession,
+                audioAnalysis = if (completedSession == null) {
+                    AudioAnalysisState.NotStarted
+                } else {
+                    state.audioAnalysis
+                },
+                debugRecording = debugState,
+            )
+        },
+    )
+    private val practiceRecordingCoordinator = PracticeRecordingCoordinator(
+        recorder = sessionAudioRecorder,
+        playbackController = debugRecordingController,
+    )
+    private val offlineAudioAnalyzer = OfflineAudioAnalyzer()
 
     private var loadJob: Job? = null
     private var playbackJob: Job? = null
     private var audioControlJob: Job? = null
     private var restartJob: Job? = null
+    private var debugAudioJob: Job? = null
+    private var debugPositionJob: Job? = null
+    private var audioAnalysisJob: Job? = null
+    private var csvExportJob: Job? = null
     private var phaseBeforePause: PracticePhase = PracticePhase.RUNNING
+    private var activeMetronomeSnapshot: SessionMetronomeSnapshot? = null
 
-    fun loadExercise(
-        documentUri: String,
-        startAfterLoad: Boolean = false,
-    ) {
+    fun loadExercise(documentUri: String) {
         if (loadJob?.isActive == true) return
+        clearAudioAnalysis()
         stopPlayback()
         mutableUiState.value = PracticeUiState(phase = PracticePhase.LOADING)
 
@@ -81,9 +127,6 @@ class PracticeViewModel(
                     phase = PracticePhase.READY,
                     exerciseElapsedNanos = -timing.countInDurationNanos,
                 )
-                if (startAfterLoad) {
-                    startPlayback()
-                }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
@@ -99,11 +142,29 @@ class PracticeViewModel(
         loadJob?.cancel()
         loadJob = null
         stopPlayback()
+        debugPositionJob?.cancel()
+        debugAudioJob?.cancel()
+        clearAudioAnalysis()
+        practiceRecordingCoordinator.deleteCompletedSession()
         mutableUiState.value = PracticeUiState()
+    }
+
+    fun onMicrophonePermissionDenied() {
+        mutableUiState.value = mutableUiState.value.copy(
+            errorMessage = "Microphone permission is required. Enable it in Android settings if the permission dialog no longer appears.",
+        )
     }
 
     fun startPlayback() {
         if (restartJob?.isActive == true || playbackJob?.isActive == true) return
+        debugPositionJob?.cancel()
+        if (debugRecordingController.state.phase in setOf(
+                DebugRecordingPlaybackPhase.PLAYING,
+                DebugRecordingPlaybackPhase.PAUSED,
+            )
+        ) {
+            runDebugAudioAction { debugRecordingController.stop() }
+        }
         val previousPlaybackJob = playbackJob
         if (previousPlaybackJob != null && !previousPlaybackJob.isCompleted) {
             restartJob = viewModelScope.launch {
@@ -121,26 +182,38 @@ class PracticeViewModel(
         val state = mutableUiState.value
         val exercise = state.playbackExercise ?: return
         val downbeatsOnly = state.playbackSettings?.downbeatsOnly == true
+        val metronomeSnapshot = SessionMetronomeSnapshot(
+            configuration = metronomeConfigurationRepository.load(),
+            downbeatsOnly = downbeatsOnly,
+        )
+        activeMetronomeSnapshot = metronomeSnapshot
 
         val timing = ExerciseTiming(exercise)
         val progressCalculator = SessionProgressCalculator(timing)
+        clearAudioAnalysis()
         mutableUiState.value = mutableUiState.value.copy(
             phase = PracticePhase.PREPARING,
             exerciseElapsedNanos = -timing.countInDurationNanos,
-            countInBeatsRemaining = exercise.countInMeasures *
-                exercise.timeSignature.numerator,
+            countInBeatsRemaining = timing.countInQuarterNoteCount,
+            recordedSession = null,
+            audioAnalysis = AudioAnalysisState.NotStarted,
+            debugCsvExport = DebugCsvExportState.NotStarted,
             errorMessage = null,
         )
 
         playbackJob = viewModelScope.launch {
+            var completedNormally = false
             try {
                 if (startupDelayMillis > 0L) {
                     delay(startupDelayMillis)
                 }
                 val playbackStartedNanos = withContext(Dispatchers.IO) {
+                    debugPositionJob?.cancel()
+                    practiceRecordingCoordinator.startSession(exercise, metronomeSnapshot)
                     metronomePlayer.start(
                         exercise = exercise,
                         downbeatsOnly = downbeatsOnly,
+                        configuration = metronomeSnapshot.configuration,
                     )
                 }
                 sessionElapsedClock.start(playbackStartedNanos)
@@ -153,6 +226,12 @@ class PracticeViewModel(
                     val sessionElapsedNanos =
                         sessionElapsedClock.elapsedNanos() ?: break
                     val progress = progressCalculator.calculate(sessionElapsedNanos)
+                    if (progress.exerciseElapsedNanos >= 0L &&
+                        practiceRecordingCoordinator.phase ==
+                        PracticeRecordingPhase.INITIAL_COUNT_IN
+                    ) {
+                        practiceRecordingCoordinator.markExerciseStarted()
+                    }
                     mutableUiState.value = mutableUiState.value.copy(
                         phase = progress.phase.toUiPhase(),
                         exerciseElapsedNanos = progress.exerciseElapsedNanos,
@@ -162,7 +241,10 @@ class PracticeViewModel(
                         ),
                     )
 
-                    if (progress.phase == PlaybackPhase.COMPLETED) break
+                    if (progress.phase == PlaybackPhase.COMPLETED) {
+                        completedNormally = true
+                        break
+                    }
                     delay(UI_UPDATE_INTERVAL_MILLIS)
                 }
             } catch (exception: CancellationException) {
@@ -175,6 +257,25 @@ class PracticeViewModel(
             } finally {
                 withContext(NonCancellable + Dispatchers.IO) {
                     metronomePlayer.stop()
+                    if (completedNormally) {
+                        runCatching { practiceRecordingCoordinator.completeSession() }
+                            .onSuccess { recordedSession ->
+                                mutableUiState.value = mutableUiState.value.copy(
+                                    recordedSession = recordedSession,
+                                )
+                                startAudioAnalysis(recordedSession)
+                            }
+                            .onFailure { exception ->
+                                mutableUiState.value = mutableUiState.value.copy(
+                                    phase = PracticePhase.ERROR,
+                                    recordedSession = null,
+                                    errorMessage = exception.message
+                                        ?: "Unable to finalize microphone recording.",
+                                )
+                            }
+                    } else {
+                        practiceRecordingCoordinator.cancelSession()
+                    }
                 }
             }
         }
@@ -189,6 +290,23 @@ class PracticeViewModel(
         val timing = ExerciseTiming(exercise)
         val sessionElapsedNanos = sessionElapsedClock.pause() ?: return
         val progress = SessionProgressCalculator(timing).calculate(sessionElapsedNanos)
+        if (progress.exerciseElapsedNanos >= 0L &&
+            practiceRecordingCoordinator.phase == PracticeRecordingPhase.INITIAL_COUNT_IN
+        ) {
+            val startMarkerFailure = runCatching {
+                practiceRecordingCoordinator.markExerciseStarted()
+            }.exceptionOrNull()
+            if (startMarkerFailure != null) {
+                playbackJob?.cancel()
+                mutableUiState.value = state.copy(
+                    phase = PracticePhase.ERROR,
+                    recordedSession = null,
+                    errorMessage = startMarkerFailure.message
+                        ?: "Unable to capture the exercise-start sample frame.",
+                )
+                return
+            }
+        }
         phaseBeforePause = progress.phase.toUiPhase()
         mutableUiState.value = state.copy(
             phase = PracticePhase.PAUSED,
@@ -203,14 +321,19 @@ class PracticeViewModel(
             try {
                 withContext(Dispatchers.IO) {
                     metronomePlayer.pause()
+                    practiceRecordingCoordinator.pauseSession()
                 }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                sessionElapsedClock.resume()
                 playbackJob?.cancel()
+                withContext(Dispatchers.IO) {
+                    runCatching { practiceRecordingCoordinator.cancelSession() }
+                    runCatching { metronomePlayer.stop() }
+                }
                 mutableUiState.value = mutableUiState.value.copy(
                     phase = PracticePhase.ERROR,
+                    recordedSession = null,
                     errorMessage = exception.message ?: "Unable to pause metronome playback.",
                 )
             }
@@ -225,17 +348,18 @@ class PracticeViewModel(
 
         audioControlJob = viewModelScope.launch {
             try {
-                if (exercise.countInMeasures > 0) {
-                    runResumeCountIn(exercise)
-                } else {
-                    resumePausedPlayback()
-                }
+                runResumeCountIn(exercise)
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
                 playbackJob?.cancel()
+                withContext(Dispatchers.IO) {
+                    runCatching { practiceRecordingCoordinator.cancelSession() }
+                    runCatching { metronomePlayer.stop() }
+                }
                 mutableUiState.value = mutableUiState.value.copy(
                     phase = PracticePhase.ERROR,
+                    recordedSession = null,
                     errorMessage = exception.message ?: "Unable to resume metronome playback.",
                 )
             }
@@ -246,12 +370,13 @@ class PracticeViewModel(
         val timing = ExerciseTiming(exercise)
         mutableUiState.value = mutableUiState.value.copy(
             phase = PracticePhase.RESUME_COUNT_IN,
-            countInBeatsRemaining = exercise.countInMeasures *
-                exercise.timeSignature.numerator,
+            countInBeatsRemaining = timing.countInQuarterNoteCount,
             errorMessage = null,
         )
+        practiceRecordingCoordinator.beginResumeCountIn()
         val countInStartedNanos = withContext(Dispatchers.IO) {
-            metronomePlayer.startResumeCountIn(exercise)
+            val configuration = checkNotNull(activeMetronomeSnapshot).configuration
+            metronomePlayer.startResumeCountIn(exercise, configuration)
         }
 
         while (true) {
@@ -273,9 +398,11 @@ class PracticeViewModel(
 
     private suspend fun resumePausedPlayback() {
         withContext(Dispatchers.IO) {
-            metronomePlayer.resume()
+            practiceRecordingCoordinator.resumeSession {
+                metronomePlayer.resume()
+                sessionElapsedClock.resume()
+            }
         }
-        sessionElapsedClock.resume()
         mutableUiState.value = mutableUiState.value.copy(
             phase = phaseBeforePause,
             countInBeatsRemaining = 0,
@@ -307,6 +434,7 @@ class PracticeViewModel(
         audioControlJob = null
         playbackJob?.cancel()
         sessionElapsedClock.reset()
+        activeMetronomeSnapshot = null
 
         if (!playerWasVisible) return
         val exercise = state.playbackExercise ?: return
@@ -337,12 +465,6 @@ class PracticeViewModel(
         }
     }
 
-    fun setCountInEnabled(enabled: Boolean) {
-        updatePlaybackSettings { settings ->
-            settings.copy(countInEnabled = enabled)
-        }
-    }
-
     fun setDownbeatsOnly(enabled: Boolean) {
         updatePlaybackSettings { settings ->
             settings.copy(downbeatsOnly = enabled)
@@ -367,11 +489,150 @@ class PracticeViewModel(
         }
     }
 
+    fun playDebugRecording() = runDebugAudioAction(startPositionUpdates = true) {
+        debugRecordingController.play()
+    }
+
+    fun pauseDebugRecording() = runDebugAudioAction {
+        debugRecordingController.pause()
+    }
+
+    fun stopDebugRecording() = runDebugAudioAction {
+        debugRecordingController.stop()
+    }
+
+    fun replayDebugRecording() = runDebugAudioAction(startPositionUpdates = true) {
+        debugRecordingController.replay()
+    }
+
+    fun deleteDebugRecording() = runDebugAudioAction {
+        clearAudioAnalysis()
+        practiceRecordingCoordinator.deleteCompletedSession()
+        mutableUiState.value = mutableUiState.value.copy(
+            recordedSession = null,
+            audioAnalysis = AudioAnalysisState.NotStarted,
+            debugCsvExport = DebugCsvExportState.NotStarted,
+        )
+    }
+
+    fun exportDebugAnalysisCsv(documentUri: String) {
+        val analysis = (mutableUiState.value.audioAnalysis as? AudioAnalysisState.Ready)
+            ?.analysis ?: return
+        csvExportJob?.cancel()
+        mutableUiState.value = mutableUiState.value.copy(
+            debugCsvExport = DebugCsvExportState.Exporting,
+        )
+        csvExportJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val output = getApplication<Application>().contentResolver.openOutputStream(
+                    documentUri.toUri(),
+                    "w",
+                ) ?: error("Unable to open the selected CSV destination.")
+                DebugAudioAnalysisCsvExporter.write(analysis, output)
+                mutableUiState.value = mutableUiState.value.copy(
+                    debugCsvExport = DebugCsvExportState.Exported(
+                        "Temporary debug CSV exported.",
+                    ),
+                )
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                mutableUiState.value = mutableUiState.value.copy(
+                    debugCsvExport = DebugCsvExportState.Failed(
+                        exception.message ?: "Unable to export debug analysis CSV.",
+                    ),
+                )
+            }
+        }
+    }
+
+    fun releaseAudioResources() {
+        stopPlayback()
+        debugAudioJob?.cancel()
+        debugPositionJob?.cancel()
+        if (audioAnalysisJob?.isActive == true) {
+            audioAnalysisJob?.cancel()
+            mutableUiState.value = mutableUiState.value.copy(
+                audioAnalysis = AudioAnalysisState.NotStarted,
+            )
+        }
+        csvExportJob?.cancel()
+        viewModelScope.launch(Dispatchers.IO) {
+            practiceRecordingCoordinator.cancelSession()
+            debugRecordingController.release()
+        }
+    }
+
+    private fun runDebugAudioAction(
+        startPositionUpdates: Boolean = false,
+        action: () -> Unit,
+    ) {
+        debugAudioJob?.cancel()
+        debugAudioJob = viewModelScope.launch(Dispatchers.IO) {
+            action()
+            if (startPositionUpdates &&
+                debugRecordingController.state.phase == DebugRecordingPlaybackPhase.PLAYING
+            ) {
+                debugPositionJob?.cancel()
+                debugPositionJob = viewModelScope.launch(Dispatchers.IO) {
+                    while (isActive &&
+                        debugRecordingController.state.phase ==
+                        DebugRecordingPlaybackPhase.PLAYING
+                    ) {
+                        debugRecordingController.refreshPosition()
+                        delay(DEBUG_POSITION_UPDATE_INTERVAL_MILLIS)
+                    }
+                }
+            } else {
+                debugPositionJob?.cancel()
+            }
+        }
+    }
+
+    private fun startAudioAnalysis(recordedSession: com.titaniumharmonics.bad.audio.RecordedSession) {
+        audioAnalysisJob?.cancel()
+        csvExportJob?.cancel()
+        mutableUiState.value = mutableUiState.value.copy(
+            audioAnalysis = AudioAnalysisState.Processing,
+            debugCsvExport = DebugCsvExportState.NotStarted,
+        )
+        audioAnalysisJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val analysis = offlineAudioAnalyzer.analyze(recordedSession) {
+                    coroutineContext.ensureActive()
+                }
+                mutableUiState.value = mutableUiState.value.copy(
+                    audioAnalysis = AudioAnalysisState.Ready(analysis),
+                )
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                mutableUiState.value = mutableUiState.value.copy(
+                    audioAnalysis = AudioAnalysisState.Failed(
+                        exception.message ?: "Offline audio preprocessing failed.",
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun clearAudioAnalysis() {
+        audioAnalysisJob?.cancel()
+        audioAnalysisJob = null
+        csvExportJob?.cancel()
+        csvExportJob = null
+    }
+
     override fun onCleared() {
         loadJob?.cancel()
         restartJob?.cancel()
         audioControlJob?.cancel()
         playbackJob?.cancel()
+        debugAudioJob?.cancel()
+        debugPositionJob?.cancel()
+        audioAnalysisJob?.cancel()
+        csvExportJob?.cancel()
+        practiceRecordingCoordinator.release()
         metronomePlayer.stop()
         super.onCleared()
     }
@@ -429,5 +690,6 @@ class PracticeViewModel(
     private companion object {
         const val RUN_STARTUP_DELAY_MILLIS = 2_000L
         const val UI_UPDATE_INTERVAL_MILLIS = 16L
+        const val DEBUG_POSITION_UPDATE_INTERVAL_MILLIS = 50L
     }
 }

@@ -7,7 +7,6 @@ import com.titaniumharmonics.bad.exercise.MeasureSubdivision
 import com.titaniumharmonics.bad.exercise.TimeSignature
 import com.titaniumharmonics.bad.exercise.compileForTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
@@ -20,7 +19,6 @@ class ClickTrackGeneratorTest {
         description = "",
         tempoBpm = 120.0,
         timeSignature = TimeSignature(numerator = 4, denominator = 4),
-        countInMeasures = 0,
         measureCount = 1,
         ticksPerQuarterNote = 480,
         notes = listOf(
@@ -33,10 +31,10 @@ class ClickTrackGeneratorTest {
     private val exercise = editableExercise.compileForTest()
 
     @Test
-    fun generate_createsTwoSecondsOf48kHzMonoSamples() {
+    fun generate_createsOneCountInMeasureAndOneExerciseMeasure() {
         val samples = ClickTrackGenerator.generate(exercise)
 
-        assertEquals(96_000, samples.size)
+        assertEquals(192_000, samples.size)
     }
 
     @Test
@@ -46,13 +44,16 @@ class ClickTrackGeneratorTest {
 
         repeat(4) { beat ->
             val clickPeak = samples
-                .sliceArray(beat * samplesPerBeat until beat * samplesPerBeat + 1_200)
+                .sliceArray(
+                    96_000 + beat * samplesPerBeat until
+                        96_000 + beat * samplesPerBeat + 1_200,
+                )
                 .maxOf { abs(it.toInt()) }
             assertTrue("No click detected on beat ${beat + 1}", clickPeak > 10_000)
         }
 
         val betweenBeatsPeak = samples
-            .sliceArray(12_000 until 13_200)
+            .sliceArray(108_000 until 109_200)
             .maxOf { abs(it.toInt()) }
         assertEquals(0, betweenBeatsPeak)
     }
@@ -65,10 +66,10 @@ class ClickTrackGeneratorTest {
         ).compileForTest()
         val samples = ClickTrackGenerator.generate(expandedExercise)
 
-        assertEquals(288_000, samples.size)
-        assertTrue(peakNearSample(samples, 0) > 10_000)
+        assertEquals(384_000, samples.size)
         assertTrue(peakNearSample(samples, 96_000) > 10_000)
         assertTrue(peakNearSample(samples, 192_000) > 10_000)
+        assertTrue(peakNearSample(samples, 288_000) > 10_000)
     }
 
     @Test
@@ -82,10 +83,10 @@ class ClickTrackGeneratorTest {
         ).compileForTest()
         val samples = ClickTrackGenerator.generate(selectedNotes)
 
-        assertTrue(peakNearSample(samples, 6_000) > 10_000)
-        assertTrue(peakNearSample(samples, 8_000) > 10_000)
-        assertTrue(peakNearSample(samples, 12_000) > 10_000)
-        assertEquals(0, peakNearSample(samples, 24_000))
+        assertTrue(peakNearSample(samples, 102_000) > 10_000)
+        assertTrue(peakNearSample(samples, 104_000) > 10_000)
+        assertTrue(peakNearSample(samples, 108_000) > 10_000)
+        assertEquals(0, peakNearSample(samples, 120_000))
     }
 
     @Test
@@ -98,16 +99,14 @@ class ClickTrackGeneratorTest {
         ).compileForTest()
         val samples = ClickTrackGenerator.generate(exerciseWithDisabledBeat)
 
-        assertTrue(peakNearSample(samples, 0) > 10_000)
-        assertEquals(0, peakNearSample(samples, 24_000))
-        assertTrue(peakNearSample(samples, 48_000) > 10_000)
+        assertTrue(peakNearSample(samples, 96_000) > 10_000)
+        assertEquals(0, peakNearSample(samples, 120_000))
+        assertTrue(peakNearSample(samples, 144_000) > 10_000)
     }
 
     @Test
     fun generate_downbeatsOnlyKeepsFullCountInAndMutesOtherExerciseBeats() {
-        val exerciseWithCountIn = editableExercise.copy(
-            countInMeasures = 1,
-        ).compileForTest()
+        val exerciseWithCountIn = editableExercise.compileForTest()
         val samples = ClickTrackGenerator.generate(
             exercise = exerciseWithCountIn,
             downbeatsOnly = true,
@@ -129,7 +128,6 @@ class ClickTrackGeneratorTest {
     @Test
     fun generate_mutesExerciseBeatsInsideEmptyMeasures() {
         val exerciseWithEmptySecondMeasure = editableExercise.copy(
-            countInMeasures = 1,
             measureCount = 2,
             notes = listOf(ExpectedNote(positionTicks = 0)),
             measureSubdivisions = List(2) { MeasureSubdivision.QUARTER },
@@ -158,10 +156,8 @@ class ClickTrackGeneratorTest {
     }
 
     @Test
-    fun generateCountIn_containsOnlyTheConfiguredAllBeatsCountIn() {
-        val exerciseWithCountIn = editableExercise.copy(
-            countInMeasures = 1,
-        ).compileForTest()
+    fun generateCountIn_containsExactlyOneMeasureOfQuarterNotes() {
+        val exerciseWithCountIn = editableExercise.compileForTest()
         val samples = ClickTrackGenerator.generateCountIn(exerciseWithCountIn)
         val samplesPerBeat = 24_000
 
@@ -184,14 +180,16 @@ class ClickTrackGeneratorTest {
             downbeatsOnly = true,
         )
 
-        assertEquals(0, samples.maxOf { abs(it.toInt()) })
+        assertEquals(
+            0,
+            samples.copyOfRange(96_000, samples.size).maxOf { abs(it.toInt()) },
+        )
     }
 
     @Test
     fun generateCountIn_alwaysUsesQuarterNotesForCompoundTimeSignatures() {
         val sixEightExercise = editableExercise.copy(
             timeSignature = TimeSignature(numerator = 6, denominator = 8),
-            countInMeasures = 1,
             notes = listOf(ExpectedNote(positionTicks = 0)),
         ).compileForTest()
         val samples = ClickTrackGenerator.generateCountIn(sixEightExercise)
@@ -205,15 +203,15 @@ class ClickTrackGeneratorTest {
     }
 
     @Test
-    fun countInAndExerciseClicks_useDifferentSoundProfiles() {
+    fun countInAndExerciseAccentsUseTheSameToneProfile() {
         val countInSamples = ClickTrackGenerator.generateCountIn(
-            editableExercise.copy(countInMeasures = 1).compileForTest(),
+            editableExercise.compileForTest(),
         )
         val exerciseSamples = ClickTrackGenerator.generate(exercise)
 
-        assertFalse(
+        assertTrue(
             countInSamples.copyOfRange(0, 1_200).contentEquals(
-                exerciseSamples.copyOfRange(0, 1_200),
+                exerciseSamples.copyOfRange(96_000, 97_200),
             ),
         )
     }
@@ -223,8 +221,8 @@ class ClickTrackGeneratorTest {
         val samples = ClickTrackGenerator.generate(exercise)
 
         assertTrue(
-            peakNearSample(samples, 0) >
-                peakNearSample(samples, 24_000),
+            peakNearSample(samples, 96_000) >
+                peakNearSample(samples, 120_000),
         )
     }
 

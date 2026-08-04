@@ -401,8 +401,7 @@ class ExerciseEditorViewModel(
             description = "",
             tempoBpm = tempoBpm,
             timeSignature = TimeSignature(numerator = 4, denominator = 4),
-            countInMeasures = 1,
-            measureCount = state.measures.size,
+                measureCount = state.measures.size,
             ticksPerQuarterNote = DEFAULT_TICKS_PER_QUARTER_NOTE,
             notes = state.measures.toExpectedNotes(
                 ticksPerMeasure = DEFAULT_TICKS_PER_MEASURE,

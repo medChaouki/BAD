@@ -19,9 +19,6 @@ object ExerciseValidator {
         if (!exercise.timeSignature.denominator.isPositivePowerOfTwo()) {
             add("Time-signature denominator must be a positive power of two.")
         }
-        if (exercise.countInMeasures < 0) {
-            add("countInMeasures must not be negative.")
-        }
         if (exercise.measureCount <= 0) {
             add("measureCount must be greater than zero.")
         }

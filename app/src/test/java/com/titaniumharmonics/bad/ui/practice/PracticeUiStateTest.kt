@@ -19,7 +19,6 @@ class PracticeUiStateTest {
             description = "",
             tempoBpm = 120.0,
             timeSignature = TimeSignature(numerator = 4, denominator = 4),
-            countInMeasures = 1,
             measureCount = 2,
             ticksPerQuarterNote = 480,
             notes = listOf(

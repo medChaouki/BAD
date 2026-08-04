@@ -2,7 +2,6 @@ package com.titaniumharmonics.bad.exercise
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExercisePlaybackSettingsTest {
@@ -13,7 +12,6 @@ class ExercisePlaybackSettingsTest {
         description = "",
         tempoBpm = 100.0,
         timeSignature = TimeSignature(numerator = 4, denominator = 4),
-        countInMeasures = 1,
         measureCount = 2,
         ticksPerQuarterNote = 480,
         notes = listOf(
@@ -32,7 +30,6 @@ class ExercisePlaybackSettingsTest {
         val settings = ExercisePlaybackSettings.fromExercise(exercise)
 
         assertEquals(100, settings.tempoBpm)
-        assertTrue(settings.countInEnabled)
         assertEquals(2, settings.measureCount)
         assertFalse(settings.downbeatsOnly)
         assertEquals(16, settings.maximumMeasureCount)
@@ -56,15 +53,13 @@ class ExercisePlaybackSettingsTest {
     }
 
     @Test
-    fun applyTo_overridesTempoAndDisablesCountIn() {
+    fun applyTo_overridesTempoWithoutConfigurableCountIn() {
         val configuredExercise = ExercisePlaybackSettings(
             tempoBpm = 120,
-            countInEnabled = false,
             measureCount = 2,
         ).applyTo(exercise)
 
         assertEquals(120.0, configuredExercise.tempoBpm, 0.0)
-        assertEquals(0, configuredExercise.countInMeasures)
         assertFalse(configuredExercise === exercise)
     }
 
@@ -72,7 +67,6 @@ class ExercisePlaybackSettingsTest {
     fun applyTo_truncatesNotesWhenMeasureCountIsReduced() {
         val configuredExercise = ExercisePlaybackSettings(
             tempoBpm = 100,
-            countInEnabled = true,
             measureCount = 1,
         ).applyTo(exercise)
 
@@ -84,7 +78,6 @@ class ExercisePlaybackSettingsTest {
     fun applyTo_repeatsPatternWhenMeasureCountIsIncreased() {
         val configuredExercise = ExercisePlaybackSettings(
             tempoBpm = 100,
-            countInEnabled = true,
             measureCount = 5,
         ).applyTo(exercise)
 
@@ -108,7 +101,6 @@ class ExercisePlaybackSettingsTest {
 
         val configuredExercise = ExercisePlaybackSettings(
             tempoBpm = 100,
-            countInEnabled = true,
             measureCount = 5,
         ).applyTo(expandedExercise)
 

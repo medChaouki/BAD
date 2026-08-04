@@ -1,5 +1,7 @@
 package com.titaniumharmonics.bad.ui
 
+import com.titaniumharmonics.bad.audio.calibration.CalibrationConfidence
+import com.titaniumharmonics.bad.audio.calibration.TimingCalibration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -7,6 +9,64 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppUiStateTest {
+    @Test
+    fun settingsOpensFromPracticeAndKeepsCalibrationAvailable() {
+        val calibration = TimingCalibration(
+            offsetSamples = 2_400L,
+            sampleRateHz = 48_000,
+            confidence = CalibrationConfidence.MEDIUM,
+            expectedClickCount = 8,
+            matchedClickCount = 7,
+            offsetSpreadSamples = 30L,
+            calibratedAtEpochMillis = 1_000L,
+            algorithmVersion = 1,
+        )
+
+        val settingsState = AppUiState(
+            activeTimingCalibration = calibration,
+        ).openSettings()
+
+        assertEquals(AppDestination.SETTINGS, settingsState.destination)
+        assertEquals(calibration, settingsState.activeTimingCalibration)
+    }
+
+    @Test
+    fun missingCalibrationOpensCalibrationOnAppStartup() {
+        val state = initialAppUiState(calibration = null)
+
+        assertEquals(AppDestination.TIMING_CALIBRATION, state.destination)
+        assertNull(state.activeTimingCalibration)
+    }
+
+    @Test
+    fun savedCalibrationOpensPracticeAndRemainsAvailableForManualRecalibration() {
+        val calibration = TimingCalibration(
+            offsetSamples = 3_456L,
+            sampleRateHz = 48_000,
+            confidence = CalibrationConfidence.HIGH,
+            expectedClickCount = 8,
+            matchedClickCount = 8,
+            offsetSpreadSamples = 20L,
+            calibratedAtEpochMillis = 1_000L,
+            algorithmVersion = 1,
+        )
+
+        val state = initialAppUiState(calibration)
+
+        assertEquals(AppDestination.PRACTICE, state.destination)
+        assertEquals(calibration, state.activeTimingCalibration)
+        assertEquals(
+            AppDestination.TIMING_CALIBRATION,
+            state.copy(destination = AppDestination.TIMING_CALIBRATION).destination,
+        )
+    }
+
+    @Test
+    fun timingCalibrationIsDedicatedDestinationAndReturnsToPractice() {
+        val calibrationState = AppUiState(destination = AppDestination.TIMING_CALIBRATION)
+        assertEquals(AppDestination.TIMING_CALIBRATION, calibrationState.destination)
+    }
+
     @Test
     fun selectingExerciseForPractice_returnsToPracticeWithDocumentToLoad() {
         val libraryState = AppUiState().openExerciseLibrary(
