@@ -3,6 +3,7 @@ package com.titaniumharmonics.bad.ui.practice
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.core.net.toUri
 import com.titaniumharmonics.bad.audio.AudioTrackMetronome
 import com.titaniumharmonics.bad.audio.AudioRecordWavSessionRecorder
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackController
@@ -11,6 +12,10 @@ import com.titaniumharmonics.bad.audio.MediaPlayerRecordedAudioPlayer
 import com.titaniumharmonics.bad.audio.PracticeRecordingCoordinator
 import com.titaniumharmonics.bad.audio.PracticeRecordingPhase
 import com.titaniumharmonics.bad.audio.MetronomePlayer
+import com.titaniumharmonics.bad.audio.analysis.AudioAnalysisState
+import com.titaniumharmonics.bad.audio.analysis.DebugAudioAnalysisCsvExporter
+import com.titaniumharmonics.bad.audio.analysis.DebugCsvExportState
+import com.titaniumharmonics.bad.audio.analysis.OfflineAudioAnalyzer
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseCompilationResult
 import com.titaniumharmonics.bad.exercise.ExerciseCompiler
@@ -33,10 +38,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.ceil
 import java.io.File
+import kotlin.math.ceil
 
 class PracticeViewModel(
     application: Application,
@@ -59,6 +65,11 @@ class PracticeViewModel(
             }
             mutableUiState.value = state.copy(
                 recordedSession = completedSession,
+                audioAnalysis = if (completedSession == null) {
+                    AudioAnalysisState.NotStarted
+                } else {
+                    state.audioAnalysis
+                },
                 debugRecording = debugState,
             )
         },
@@ -67,6 +78,7 @@ class PracticeViewModel(
         recorder = sessionAudioRecorder,
         playbackController = debugRecordingController,
     )
+    private val offlineAudioAnalyzer = OfflineAudioAnalyzer()
 
     private var loadJob: Job? = null
     private var playbackJob: Job? = null
@@ -74,10 +86,13 @@ class PracticeViewModel(
     private var restartJob: Job? = null
     private var debugAudioJob: Job? = null
     private var debugPositionJob: Job? = null
+    private var audioAnalysisJob: Job? = null
+    private var csvExportJob: Job? = null
     private var phaseBeforePause: PracticePhase = PracticePhase.RUNNING
 
     fun loadExercise(documentUri: String) {
         if (loadJob?.isActive == true) return
+        clearAudioAnalysis()
         stopPlayback()
         mutableUiState.value = PracticeUiState(phase = PracticePhase.LOADING)
 
@@ -122,6 +137,7 @@ class PracticeViewModel(
         stopPlayback()
         debugPositionJob?.cancel()
         debugAudioJob?.cancel()
+        clearAudioAnalysis()
         practiceRecordingCoordinator.deleteCompletedSession()
         mutableUiState.value = PracticeUiState()
     }
@@ -162,11 +178,14 @@ class PracticeViewModel(
 
         val timing = ExerciseTiming(exercise)
         val progressCalculator = SessionProgressCalculator(timing)
+        clearAudioAnalysis()
         mutableUiState.value = mutableUiState.value.copy(
             phase = PracticePhase.PREPARING,
             exerciseElapsedNanos = -timing.countInDurationNanos,
             countInBeatsRemaining = timing.countInQuarterNoteCount,
             recordedSession = null,
+            audioAnalysis = AudioAnalysisState.NotStarted,
+            debugCsvExport = DebugCsvExportState.NotStarted,
             errorMessage = null,
         )
 
@@ -231,6 +250,7 @@ class PracticeViewModel(
                                 mutableUiState.value = mutableUiState.value.copy(
                                     recordedSession = recordedSession,
                                 )
+                                startAudioAnalysis(recordedSession)
                             }
                             .onFailure { exception ->
                                 mutableUiState.value = mutableUiState.value.copy(
@@ -471,14 +491,57 @@ class PracticeViewModel(
     }
 
     fun deleteDebugRecording() = runDebugAudioAction {
+        clearAudioAnalysis()
         practiceRecordingCoordinator.deleteCompletedSession()
-        mutableUiState.value = mutableUiState.value.copy(recordedSession = null)
+        mutableUiState.value = mutableUiState.value.copy(
+            recordedSession = null,
+            audioAnalysis = AudioAnalysisState.NotStarted,
+            debugCsvExport = DebugCsvExportState.NotStarted,
+        )
+    }
+
+    fun exportDebugAnalysisCsv(documentUri: String) {
+        val analysis = (mutableUiState.value.audioAnalysis as? AudioAnalysisState.Ready)
+            ?.analysis ?: return
+        csvExportJob?.cancel()
+        mutableUiState.value = mutableUiState.value.copy(
+            debugCsvExport = DebugCsvExportState.Exporting,
+        )
+        csvExportJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val output = getApplication<Application>().contentResolver.openOutputStream(
+                    documentUri.toUri(),
+                    "w",
+                ) ?: error("Unable to open the selected CSV destination.")
+                DebugAudioAnalysisCsvExporter.write(analysis, output)
+                mutableUiState.value = mutableUiState.value.copy(
+                    debugCsvExport = DebugCsvExportState.Exported(
+                        "Temporary debug CSV exported.",
+                    ),
+                )
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                mutableUiState.value = mutableUiState.value.copy(
+                    debugCsvExport = DebugCsvExportState.Failed(
+                        exception.message ?: "Unable to export debug analysis CSV.",
+                    ),
+                )
+            }
+        }
     }
 
     fun releaseAudioResources() {
         stopPlayback()
         debugAudioJob?.cancel()
         debugPositionJob?.cancel()
+        if (audioAnalysisJob?.isActive == true) {
+            audioAnalysisJob?.cancel()
+            mutableUiState.value = mutableUiState.value.copy(
+                audioAnalysis = AudioAnalysisState.NotStarted,
+            )
+        }
+        csvExportJob?.cancel()
         viewModelScope.launch(Dispatchers.IO) {
             practiceRecordingCoordinator.cancelSession()
             debugRecordingController.release()
@@ -511,6 +574,40 @@ class PracticeViewModel(
         }
     }
 
+    private fun startAudioAnalysis(recordedSession: com.titaniumharmonics.bad.audio.RecordedSession) {
+        audioAnalysisJob?.cancel()
+        csvExportJob?.cancel()
+        mutableUiState.value = mutableUiState.value.copy(
+            audioAnalysis = AudioAnalysisState.Processing,
+            debugCsvExport = DebugCsvExportState.NotStarted,
+        )
+        audioAnalysisJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val analysis = offlineAudioAnalyzer.analyze(recordedSession) {
+                    coroutineContext.ensureActive()
+                }
+                mutableUiState.value = mutableUiState.value.copy(
+                    audioAnalysis = AudioAnalysisState.Ready(analysis),
+                )
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                mutableUiState.value = mutableUiState.value.copy(
+                    audioAnalysis = AudioAnalysisState.Failed(
+                        exception.message ?: "Offline audio preprocessing failed.",
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun clearAudioAnalysis() {
+        audioAnalysisJob?.cancel()
+        audioAnalysisJob = null
+        csvExportJob?.cancel()
+        csvExportJob = null
+    }
+
     override fun onCleared() {
         loadJob?.cancel()
         restartJob?.cancel()
@@ -518,6 +615,8 @@ class PracticeViewModel(
         playbackJob?.cancel()
         debugAudioJob?.cancel()
         debugPositionJob?.cancel()
+        audioAnalysisJob?.cancel()
+        csvExportJob?.cancel()
         practiceRecordingCoordinator.release()
         metronomePlayer.stop()
         super.onCleared()
@@ -576,6 +675,6 @@ class PracticeViewModel(
     private companion object {
         const val RUN_STARTUP_DELAY_MILLIS = 2_000L
         const val UI_UPDATE_INTERVAL_MILLIS = 16L
-        const val DEBUG_POSITION_UPDATE_INTERVAL_MILLIS = 100L
+        const val DEBUG_POSITION_UPDATE_INTERVAL_MILLIS = 50L
     }
 }

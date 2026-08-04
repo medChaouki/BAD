@@ -29,7 +29,10 @@ automatic hit detection is not implemented yet.
 - Streaming `AudioTrack` output
 - Practice-session microphone capture to mono PCM WAV, preferring 48 kHz with
   a 44.1 kHz fallback
+- Offline WAV validation and transient-envelope preprocessing after completed
+  practice sessions
 - Temporary debug-only in-app recording playback, position, and deletion
+- Temporary debug CSV export and synchronized envelope/noise-floor graph
 - Single-lane scrolling rhythm timeline
 - Static first-measure preview while an exercise is idle
 - BPM-scaled beat highlights at the judgement line
@@ -148,7 +151,7 @@ the sum of all multipliers.
 
 ```text
 app/src/main/java/com/titaniumharmonics/bad/
-├── audio/       Metronome output, WAV recording, and debug playback
+├── audio/       Metronome, WAV recording/playback, and offline analysis
 ├── exercise/    Exercise model, JSON codec, validation, and asset loading
 ├── timing/      Monotonic clock, musical timing, and session progression
 └── ui/
@@ -296,15 +299,42 @@ resume count-ins append no frames, so offline grading can subtract this start
 index to obtain continuous exercise-relative sample positions. No session
 metadata or timeline sidecar is written to storage.
 
+Natural completion also starts offline preprocessing away from the UI thread.
+The WAV reader validates RIFF/WAVE chunks instead of assuming a fixed 44-byte
+header and accepts the recorder's mono signed 16-bit PCM at either 48 kHz or
+44.1 kHz. Session metadata must match the WAV exactly. Analysis begins at
+`exerciseStartSampleFrame`, so the initial count-in is excluded; paused time
+and resume count-ins are already absent from the recorded sample stream.
+
+The first analysis pass normalizes PCM, removes the graded signal's mean DC
+offset, applies a configurable first-order 80 Hz high-pass filter, and measures
+overlapping 5 ms frames at 2 ms hops. Each frame uses its actual center sample
+as its exercise timestamp, including the final partial frame without zero
+padding. Frame peak and RMS level feed a transient envelope with 2 ms attack
+and 12 ms release, followed by a slowly adapting noise-floor estimate. These
+defaults are centralized in `AudioAnalysisConfig`; onset detection is not yet
+implemented.
+
 Debug builds show a temporary **Debug: Recorded Audio** card after natural
 completion. It uses Android `MediaPlayer` to play, pause, stop, replay, or
 delete the WAV and shows its current position, duration, and file path. A new
 practice session stops debug playback and replaces the previous recording. It
 also shows the actual sample rate, total and graded frame counts, the exercise
 start frame, and recording and graded durations.
+After preprocessing, the card adds a peak-preserving envelope/noise-floor
+graph synchronized to the complete WAV playback cursor. The graph keeps the
+count-in region visually separate from exercise time zero and bounds rendered
+data to roughly 1,500 points. A debug-only Storage Access Framework action can
+export one locale-independent CSV row per analysis frame with exercise time,
+representative raw and filtered samples, frame peak, frame RMS level, envelope,
+and noise floor. Analysis or export failure does not remove the playable WAV.
 Leaving the Practice screen releases both capture and playback resources. The
 recording pipeline remains present in release builds, but this playback card is
 compiled behind `BuildConfig.DEBUG` and is not shown there.
+
+Current alignment is structural software sample alignment only. A later PR
+will calibrate the remaining device- and route-dependent input/output latency
+before exercise-relative samples are used for final hit judgements.
 
 When microphone detection and hit matching are added, timing feedback will use
 a green ring for on-time hits, a blue ring for early hits, and a red ring for

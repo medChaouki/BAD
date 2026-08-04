@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -36,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -44,10 +46,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -62,6 +67,11 @@ import com.titaniumharmonics.bad.BuildConfig
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
 import com.titaniumharmonics.bad.audio.RecordedSession
+import com.titaniumharmonics.bad.audio.analysis.AudioAnalysis
+import com.titaniumharmonics.bad.audio.analysis.AudioAnalysisState
+import com.titaniumharmonics.bad.audio.analysis.DebugAnalysisTimeline
+import com.titaniumharmonics.bad.audio.analysis.DebugCsvExportState
+import com.titaniumharmonics.bad.audio.analysis.PeakPreservingGraphDownsampler
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.exercise.RuntimeExpectedNote
@@ -98,6 +108,11 @@ fun PracticeRoute(
             viewModel.onMicrophonePermissionDenied()
         }
         startAfterPermissionGrant = false
+    }
+    val debugCsvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri ->
+        uri?.let { viewModel.exportDebugAnalysisCsv(it.toString()) }
     }
     val requestSessionStart = {
         if (ContextCompat.checkSelfPermission(
@@ -185,6 +200,9 @@ fun PracticeRoute(
         onStopDebugRecording = viewModel::stopDebugRecording,
         onReplayDebugRecording = viewModel::replayDebugRecording,
         onDeleteDebugRecording = viewModel::deleteDebugRecording,
+        onExportDebugCsv = {
+            debugCsvLauncher.launch("bad-audio-analysis.csv")
+        },
     )
 }
 
@@ -220,6 +238,7 @@ fun PracticeScreen(
     onStopDebugRecording: () -> Unit,
     onReplayDebugRecording: () -> Unit,
     onDeleteDebugRecording: () -> Unit,
+    onExportDebugCsv: () -> Unit,
 ) {
     val playbackExercise = uiState.playbackExercise
     var playbackSettingsExpanded by rememberSaveable(uiState.exercise?.id) {
@@ -238,6 +257,7 @@ fun PracticeScreen(
             onStopDebugRecording = onStopDebugRecording,
             onReplayDebugRecording = onReplayDebugRecording,
             onDeleteDebugRecording = onDeleteDebugRecording,
+            onExportDebugCsv = onExportDebugCsv,
         )
         return
     }
@@ -359,6 +379,7 @@ private fun FullScreenPracticePlayer(
     onStopDebugRecording: () -> Unit,
     onReplayDebugRecording: () -> Unit,
     onDeleteDebugRecording: () -> Unit,
+    onExportDebugCsv: () -> Unit,
 ) {
     val timing = remember(exercise) { ExerciseTiming(exercise) }
     val timelineElapsedNanos = when (uiState.phase) {
@@ -431,11 +452,14 @@ private fun FullScreenPracticePlayer(
             DebugRecordedAudioCard(
                 state = uiState.debugRecording,
                 recordedSession = uiState.recordedSession,
+                analysisState = uiState.audioAnalysis,
+                csvExportState = uiState.debugCsvExport,
                 onPlay = onPlayDebugRecording,
                 onPause = onPauseDebugRecording,
                 onStop = onStopDebugRecording,
                 onReplay = onReplayDebugRecording,
                 onDelete = onDeleteDebugRecording,
+                onExportCsv = onExportDebugCsv,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .padding(horizontal = 20.dp),
@@ -498,16 +522,22 @@ private fun FullScreenPracticePlayer(
 private fun DebugRecordedAudioCard(
     state: DebugRecordingPlaybackState,
     recordedSession: RecordedSession?,
+    analysisState: AudioAnalysisState,
+    csvExportState: DebugCsvExportState,
     onPlay: () -> Unit,
     onPause: () -> Unit,
     onStop: () -> Unit,
     onReplay: () -> Unit,
     onDelete: () -> Unit,
+    onExportCsv: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .heightIn(max = 580.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text("Debug: Recorded Audio", fontWeight = FontWeight.Bold)
@@ -542,6 +572,11 @@ private fun DebugRecordedAudioCard(
                 )
             }
             state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            DebugAnalysisSection(
+                session = recordedSession,
+                analysisState = analysisState,
+                playbackState = state,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -578,10 +613,177 @@ private fun DebugRecordedAudioCard(
                     enabled = state.filePath != null,
                     modifier = Modifier.weight(1f),
                 ) { Text("Delete") }
+                OutlinedButton(
+                    onClick = onExportCsv,
+                    enabled = analysisState is AudioAnalysisState.Ready &&
+                        csvExportState !is DebugCsvExportState.Exporting,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Export CSV") }
+            }
+            when (csvExportState) {
+                DebugCsvExportState.NotStarted -> Unit
+                DebugCsvExportState.Exporting -> Text("Exporting temporary debug CSV…")
+                is DebugCsvExportState.Exported -> Text(csvExportState.message)
+                is DebugCsvExportState.Failed -> Text(
+                    csvExportState.message,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }
 }
+
+@Composable
+private fun DebugAnalysisSection(
+    session: RecordedSession?,
+    analysisState: AudioAnalysisState,
+    playbackState: DebugRecordingPlaybackState,
+) {
+    Text("Offline analysis", fontWeight = FontWeight.Bold)
+    when (analysisState) {
+        AudioAnalysisState.NotStarted -> Text("Not started")
+        AudioAnalysisState.Processing -> Text("Processing…")
+        is AudioAnalysisState.Failed -> {
+            Text(
+                "Graph unavailable: ${analysisState.message}",
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text("Recorded WAV playback remains available.")
+        }
+        is AudioAnalysisState.Ready -> {
+            val analysis = analysisState.analysis
+            Text(
+                text = buildString {
+                    appendLine("Ready · ${analysis.sampleRateHz} Hz")
+                    appendLine("Graded samples: ${analysis.gradedSampleFrameCount}")
+                    appendLine("Frames: ${analysis.frameCount}")
+                    appendLine(
+                        "Frame / hop: ${analysis.configuration.frameDurationMillis} / " +
+                            "${analysis.configuration.hopDurationMillis} ms",
+                    )
+                    appendLine("Maximum input: ${analysis.maximumNormalizedInputAmplitude}")
+                    appendLine("Maximum frame peak: ${analysis.maximumFramePeak}")
+                    appendLine("Maximum envelope: ${analysis.maximumEnvelope}")
+                    append("Mean noise floor: ${analysis.meanNoiseFloor}")
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (session != null) {
+                DebugEnvelopeGraph(
+                    session = session,
+                    analysis = analysis,
+                    playbackState = playbackState,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebugEnvelopeGraph(
+    session: RecordedSession,
+    analysis: AudioAnalysis,
+    playbackState: DebugRecordingPlaybackState,
+) {
+    val timeline = remember(session) { DebugAnalysisTimeline(session) }
+    var graphWidthPixels by remember(analysis) { mutableIntStateOf(0) }
+    val maximumPointCount = (graphWidthPixels * GRAPH_POINTS_PER_PIXEL)
+        .coerceIn(MINIMUM_DEBUG_GRAPH_POINTS, MAXIMUM_DEBUG_GRAPH_POINTS)
+    val graph = remember(analysis, maximumPointCount) {
+        PeakPreservingGraphDownsampler.downsample(
+            analysis = analysis,
+            maximumPointCount = maximumPointCount,
+        )
+    }
+    val cursor = timeline.cursor(playbackState)
+    val countInColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    val envelopeColor = MaterialTheme.colorScheme.primary
+    val noiseColor = MaterialTheme.colorScheme.tertiary
+    val cursorColor = MaterialTheme.colorScheme.error
+    val boundaryColor = MaterialTheme.colorScheme.onSurface
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Count-in | Exercise envelope", style = MaterialTheme.typography.labelMedium)
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .onSizeChanged { graphWidthPixels = it.width }
+                .background(MaterialTheme.colorScheme.surface),
+        ) {
+            val plotHeight = size.height
+            val boundaryX = size.width * timeline.exerciseStartNormalizedPosition
+            drawRect(countInColor, size = androidx.compose.ui.geometry.Size(boundaryX, size.height))
+
+            fun graphY(value: Float): Float =
+                plotHeight - (value / graph.maximumValue).coerceIn(0.0f, 1.0f) * plotHeight
+
+            val envelopePath = Path()
+            val noisePath = Path()
+            graph.points.forEachIndexed { index, point ->
+                val x = size.width * timeline.normalizedWavPositionForExerciseSample(
+                    point.exerciseSampleFrame,
+                )
+                val envelopeY = graphY(point.envelope)
+                val noiseY = graphY(point.noiseFloor)
+                if (index == 0) {
+                    envelopePath.moveTo(x, envelopeY)
+                    noisePath.moveTo(x, noiseY)
+                } else {
+                    envelopePath.lineTo(x, envelopeY)
+                    noisePath.lineTo(x, noiseY)
+                }
+            }
+            drawPath(envelopePath, envelopeColor, style = Stroke(width = 3.dp.toPx()))
+            drawPath(noisePath, noiseColor, style = Stroke(width = 2.dp.toPx()))
+            drawLine(
+                color = boundaryColor,
+                start = Offset(boundaryX, 0.0f),
+                end = Offset(boundaryX, size.height),
+                strokeWidth = 2.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.0f, 8.0f)),
+            )
+            val cursorX = size.width * cursor.normalizedWavPosition
+            drawLine(
+                color = cursorColor,
+                start = Offset(cursorX, 0.0f),
+                end = Offset(cursorX, size.height),
+                strokeWidth = 3.dp.toPx(),
+            )
+        }
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "-${timeline.countInDurationMillis.roundToInt()} ms",
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.align(Alignment.CenterStart),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(timeline.exerciseStartNormalizedPosition)
+                    .align(Alignment.CenterStart),
+            ) {
+                Text(
+                    "0 ms",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
+            }
+            Text(
+                "+${session.gradedExerciseDurationMillis} ms",
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+        Text(
+            "Envelope: solid · Noise floor: thin · Exercise start: dashed · Cursor: thick",
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
+
+private const val MAXIMUM_DEBUG_GRAPH_POINTS = 1_500
+private const val MINIMUM_DEBUG_GRAPH_POINTS = 100
+private const val GRAPH_POINTS_PER_PIXEL = 2
 
 private fun Long.toDebugTime(): String {
     val totalSeconds = (this / 1_000L).coerceAtLeast(0L)
@@ -1171,6 +1373,7 @@ private fun PracticeScreenPreview() {
             onStopDebugRecording = {},
             onReplayDebugRecording = {},
             onDeleteDebugRecording = {},
+            onExportDebugCsv = {},
         )
     }
 }
