@@ -3,6 +3,7 @@ package com.titaniumharmonics.bad.audio.analysis
 import com.titaniumharmonics.bad.audio.PcmAudioFormat
 import com.titaniumharmonics.bad.audio.RecordedSession
 import com.titaniumharmonics.bad.audio.SampleFrameTiming
+import com.titaniumharmonics.bad.audio.metronome.MetronomeConfiguration
 import kotlin.math.roundToInt
 
 data class AudioAnalysisConfig(
@@ -125,6 +126,10 @@ data class AudioAnalysisFrame(
     val exerciseTimeMillis: Double,
     val rawSample: Float,
     val filteredSample: Float,
+    val preNotchFrameLevel: Float,
+    val preNotchEnvelope: Float,
+    val postNotchFrameLevel: Float,
+    val postNotchEnvelope: Float,
     val framePeak: Float,
     val frameLevel: Float,
     val envelope: Float,
@@ -139,6 +144,8 @@ class AudioAnalysis(
     val frameCenterExerciseSamples: ImmutableLongSeries,
     val representativeRawSamples: ImmutableFloatSeries,
     val representativeFilteredSamples: ImmutableFloatSeries,
+    val preNotchFrameLevels: ImmutableFloatSeries,
+    val preNotchEnvelope: ImmutableFloatSeries,
     val framePeaks: ImmutableFloatSeries,
     val frameLevels: ImmutableFloatSeries,
     val envelope: ImmutableFloatSeries,
@@ -148,6 +155,9 @@ class AudioAnalysis(
     val maximumEnvelope: Float,
     val meanNoiseFloor: Float,
     val configuration: AudioAnalysisConfig,
+    val metronomeConfiguration: MetronomeConfiguration,
+    val expectedMetronomeExerciseSamples: ImmutableLongSeries,
+    val maximumMetronomeSuppression: Float,
 ) {
     init {
         require(sampleRateHz > 0)
@@ -159,6 +169,8 @@ class AudioAnalysis(
             listOf(
                 representativeRawSamples.size,
                 representativeFilteredSamples.size,
+                preNotchFrameLevels.size,
+                preNotchEnvelope.size,
                 framePeaks.size,
                 frameLevels.size,
                 envelope.size,
@@ -179,6 +191,10 @@ class AudioAnalysis(
             exerciseTimeMillis = centerSample * 1_000.0 / sampleRateHz,
             rawSample = representativeRawSamples[index],
             filteredSample = representativeFilteredSamples[index],
+            preNotchFrameLevel = preNotchFrameLevels[index],
+            preNotchEnvelope = preNotchEnvelope[index],
+            postNotchFrameLevel = frameLevels[index],
+            postNotchEnvelope = envelope[index],
             framePeak = framePeaks[index],
             frameLevel = frameLevels[index],
             envelope = envelope[index],

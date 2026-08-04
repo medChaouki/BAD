@@ -9,8 +9,30 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
+import com.titaniumharmonics.bad.audio.metronome.MetronomeConfiguration
+import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
 
 class PracticeRecordingCoordinatorTest {
+    @Test
+    fun completedSessionPreservesFrozenMetronomeConfiguration() {
+        val fixture = fixture()
+        val snapshot = SessionMetronomeSnapshot(
+            configuration = MetronomeConfiguration.DEFAULT.withToneFrequency(5_000),
+            downbeatsOnly = true,
+        )
+        fixture.coordinator.startSession(fixture.exercise, snapshot)
+        fixture.recorder.appendFrames(192_000L)
+        fixture.coordinator.markExerciseStarted()
+        fixture.recorder.appendFrames(48_000L)
+
+        val session = fixture.coordinator.completeSession()
+        val independentlyChangedGlobal = MetronomeConfiguration.DEFAULT.withToneFrequency(7_000)
+
+        assertEquals(snapshot, session.metronomeSnapshot)
+        assertEquals(5_000, session.metronomeSnapshot.configuration.tone.frequencyHz)
+        assertEquals(7_000, independentlyChangedGlobal.tone.frequencyHz)
+    }
+
     @Test
     fun noPauseSession_capturesStartAndCreatesOneCompletedSession() {
         val fixture = fixture()

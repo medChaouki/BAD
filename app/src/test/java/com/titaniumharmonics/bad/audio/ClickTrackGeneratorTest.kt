@@ -7,7 +7,6 @@ import com.titaniumharmonics.bad.exercise.MeasureSubdivision
 import com.titaniumharmonics.bad.exercise.TimeSignature
 import com.titaniumharmonics.bad.exercise.compileForTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
@@ -204,13 +203,13 @@ class ClickTrackGeneratorTest {
     }
 
     @Test
-    fun countInAndExerciseClicks_useDifferentSoundProfiles() {
+    fun countInAndExerciseAccentsUseTheSameToneProfile() {
         val countInSamples = ClickTrackGenerator.generateCountIn(
             editableExercise.compileForTest(),
         )
         val exerciseSamples = ClickTrackGenerator.generate(exercise)
 
-        assertFalse(
+        assertTrue(
             countInSamples.copyOfRange(0, 1_200).contentEquals(
                 exerciseSamples.copyOfRange(96_000, 97_200),
             ),

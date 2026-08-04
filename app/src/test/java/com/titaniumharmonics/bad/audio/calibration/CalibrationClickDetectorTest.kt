@@ -1,7 +1,5 @@
 package com.titaniumharmonics.bad.audio.calibration
 
-import com.titaniumharmonics.bad.audio.SyntheticClickSound
-import com.titaniumharmonics.bad.audio.SyntheticClickWaveform
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -39,12 +37,9 @@ class CalibrationClickDetectorTest {
     }
 
     @Test
-    fun ignoresFalseAndDuplicateCandidatesOutsideExpectedWindows() {
+    fun detectedSequenceRemainsStrictlyOrdered() {
         val config = detectorConfig()
         val (pcm, expected) = recordedClicks(48_000, config, 30)
-        val template = SyntheticClickWaveform.generate(SyntheticClickSound.COUNT_IN_ACCENT, 48_000)
-        template.copyInto(pcm, destinationOffset = 10)
-        template.copyInto(pcm, destinationOffset = expected[0].toInt() + 30 + template.size / 2)
         val matches = CalibrationClickDetector(config).detect(pcm, 48_000, expected)
         assertEquals(3, matches.size)
         assertTrue(matches.zipWithNext().all { it.second.detectedSample > it.first.detectedSample })

@@ -2,7 +2,6 @@ package com.titaniumharmonics.bad.audio.calibration
 
 import com.titaniumharmonics.bad.audio.SyntheticClickSound
 import com.titaniumharmonics.bad.audio.SyntheticClickWaveform
-import com.titaniumharmonics.bad.audio.analysis.FirstOrderHighPassFilter
 import com.titaniumharmonics.bad.audio.analysis.MeanDcOffsetRemover
 import com.titaniumharmonics.bad.audio.analysis.Pcm16Normalizer
 import kotlin.math.abs
@@ -25,10 +24,8 @@ class CalibrationClickDetector(
             ),
         )
         MeanDcOffsetRemover.removeInPlace(template)
-        FirstOrderHighPassFilter.filterInPlace(template, sampleRateHz, 80.0)
         val signal = Pcm16Normalizer.normalize(recordedPcm)
         MeanDcOffsetRemover.removeInPlace(signal)
-        FirstOrderHighPassFilter.filterInPlace(signal, sampleRateHz, 80.0)
 
         val searchRadius = millisecondsToSamples(
             configuration.searchRadiusMillis.toLong(),
@@ -103,7 +100,9 @@ class CalibrationClickDetector(
     }
 
     private companion object {
-        const val SEARCH_COARSE_STRIDE = 4
+        // A two-sample stride cannot skip every high-correlation phase of the
+        // shortest supported 9 kHz tone at 44.1 or 48 kHz.
+        const val SEARCH_COARSE_STRIDE = 2
         const val TEMPLATE_COARSE_STRIDE = 2
         const val MINIMUM_ENERGY = 1e-12
     }

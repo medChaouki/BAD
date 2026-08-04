@@ -1,6 +1,8 @@
 package com.titaniumharmonics.bad.audio
 
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
+import com.titaniumharmonics.bad.audio.metronome.MetronomeConfiguration
+import com.titaniumharmonics.bad.audio.metronome.WindowedMetronomeToneGenerator
 import com.titaniumharmonics.bad.timing.ExerciseTiming
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -14,8 +16,10 @@ object ClickTrackGenerator {
         exercise: RuntimeExercise,
         sampleRateHz: Int = DEFAULT_SAMPLE_RATE_HZ,
         downbeatsOnly: Boolean = false,
+        configuration: MetronomeConfiguration = MetronomeConfiguration.DEFAULT,
     ): ShortArray {
         require(sampleRateHz > 0) { "sampleRateHz must be greater than zero." }
+        configuration.requireValidForSampleRate(sampleRateHz)
 
         val timing = ExerciseTiming(exercise)
         val samples = createSampleBuffer(
@@ -27,6 +31,7 @@ object ClickTrackGenerator {
             exercise = exercise,
             timing = timing,
             sampleRateHz = sampleRateHz,
+            configuration = configuration,
         )
 
         exercise.notes.forEach { note ->
@@ -43,7 +48,7 @@ object ClickTrackGenerator {
                 startSample = noteTimeNanos.toSampleIndex(sampleRateHz),
                 sampleRateHz = sampleRateHz,
                 isAccent = note.accent || isMeasureStart,
-                sound = ClickSound.EXERCISE,
+                configuration = configuration,
             )
         }
         return samples
@@ -52,8 +57,10 @@ object ClickTrackGenerator {
     fun generateCountIn(
         exercise: RuntimeExercise,
         sampleRateHz: Int = DEFAULT_SAMPLE_RATE_HZ,
+        configuration: MetronomeConfiguration = MetronomeConfiguration.DEFAULT,
     ): ShortArray {
         require(sampleRateHz > 0) { "sampleRateHz must be greater than zero." }
+        configuration.requireValidForSampleRate(sampleRateHz)
 
         val timing = ExerciseTiming(exercise)
         val samples = createSampleBuffer(
@@ -65,6 +72,7 @@ object ClickTrackGenerator {
             exercise = exercise,
             timing = timing,
             sampleRateHz = sampleRateHz,
+            configuration = configuration,
         )
         return samples
     }
@@ -88,6 +96,7 @@ object ClickTrackGenerator {
         exercise: RuntimeExercise,
         timing: ExerciseTiming,
         sampleRateHz: Int,
+        configuration: MetronomeConfiguration,
     ) {
         val countInDurationTicks = timing.measureDurationTicks
         var countInPositionTicks = 0L
@@ -99,7 +108,7 @@ object ClickTrackGenerator {
                 sampleRateHz = sampleRateHz,
                 isAccent =
                     countInPositionTicks % timing.measureDurationTicks == 0L,
-                sound = ClickSound.COUNT_IN,
+                configuration = configuration,
             )
             countInPositionTicks = Math.addExact(
                 countInPositionTicks,
@@ -113,32 +122,19 @@ object ClickTrackGenerator {
         startSample: Int,
         sampleRateHz: Int,
         isAccent: Boolean,
-        sound: ClickSound,
+        configuration: MetronomeConfiguration,
     ) {
-        val clickSound = when (sound) {
-            ClickSound.COUNT_IN -> if (isAccent) {
-                SyntheticClickSound.COUNT_IN_ACCENT
-            } else {
-                SyntheticClickSound.COUNT_IN
-            }
-            ClickSound.EXERCISE -> if (isAccent) {
-                SyntheticClickSound.EXERCISE_ACCENT
-            } else {
-                SyntheticClickSound.EXERCISE
-            }
-        }
-        SyntheticClickWaveform.mixInto(samples, startSample, clickSound, sampleRateHz)
+        WindowedMetronomeToneGenerator.mixInto(
+            destination = samples,
+            startSample = startSample,
+            configuration = configuration.tone,
+            accent = isAccent,
+            sampleRateHz = sampleRateHz,
+        )
     }
 
     private fun Long.toSampleIndex(sampleRateHz: Int): Int =
         (toDouble() * sampleRateHz / NANOS_PER_SECOND).roundToInt()
-
-    private enum class ClickSound {
-        COUNT_IN,
-        EXERCISE,
-        ;
-
-    }
 
     private const val NANOS_PER_SECOND = 1_000_000_000.0
 }

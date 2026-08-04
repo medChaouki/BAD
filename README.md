@@ -235,11 +235,10 @@ ticks are converted to nanoseconds from the exercise tempo.
 The practice session uses a monotonic clock. The scrolling timeline follows
 that clock; Compose animation is not the authoritative timing source.
 
-Metronome clicks are sample-aligned relative to one another. Physical output
-latency still depends on the Android device and audio route. Output-latency and
-microphone-input calibration have not been implemented yet. Recorded sample
-indexes remove structural pause and resume-count-in timing errors, but a small
-fixed device-dependent input/output offset remains for a later calibration PR.
+Metronome tones are sample-aligned relative to one another. Physical output
+latency still depends on the Android device and audio route; the universal
+timing calibration described below measures the phone-speaker/built-in-
+microphone path.
 
 Playback settings can be adjusted while an exercise is idle. They remain in
 effect for repeated runs of that exercise and reset when another exercise is
@@ -254,6 +253,30 @@ The **First note only** option shows its enabled or disabled state beneath the
 label. When enabled, it keeps the full count-in audible, then plays the
 metronome only when an expected note is enabled at the beginning of an exercise
 measure.
+
+## Metronome and rejection filter
+
+The metronome uses a deterministic Hann-windowed sine burst instead of a
+broadband click. Defaults are 6000 Hz, 10 ms, 55% normal volume, and 85% accent
+volume. Normal and accent beats use the same frequency and differ only in
+amplitude. Settings exposes every control directly: tone frequency
+(3000–9000 Hz), duration (5–30 ms), independent normal/accent volume
+(0–100%), notch enablement, notch center (3000–9000 Hz), and Q (2–30, default
+10). Normal and accent test-tone actions play four beats at 500 ms intervals
+over two seconds without starting recording or practice.
+
+The notch center follows tone frequency by default. Editing the notch center
+creates a persistent custom override; **Relink to tone frequency** restores
+automatic following. Invalid or corrupted stored values fall back to the
+documented defaults. Settings changes affect future sessions only.
+
+Each practice run freezes a public immutable `SessionMetronomeSnapshot` with
+the exact `MetronomeConfiguration` and downbeats-only state used for playback.
+`RecordedSession` retains that snapshot in memory, so later global changes do
+not reinterpret an older WAV. Sessions constructed without a snapshot use the
+documented default configuration as a compatibility fallback. These domain
+types are independent from Compose and are available to future audio and
+grading modules.
 
 During the exercise, every beat produces a brief green outline ring as it
 crosses the judgement line, including beats muted by downbeat-only mode. The
@@ -308,10 +331,12 @@ header and accepts the recorder's mono signed 16-bit PCM at either 48 kHz or
 and resume count-ins are already absent from the recorded sample stream.
 
 The first analysis pass normalizes PCM, removes the graded signal's mean DC
-offset, applies a configurable first-order 80 Hz high-pass filter, and measures
-overlapping 5 ms frames at 2 ms hops. Each frame uses its actual center sample
+offset, applies a configurable first-order 80 Hz high-pass filter, then applies
+the session snapshot's second-order biquad notch before measuring overlapping
+5 ms frames at 2 ms hops. The notch is enabled by default at 6000 Hz with Q 10.
+Each frame uses its actual center sample
 as its exercise timestamp, including the final partial frame without zero
-padding. Frame peak and RMS level feed a transient envelope with 2 ms attack
+padding. Post-notch frame peak and RMS level feed a transient envelope with 2 ms attack
 and 12 ms release, followed by a slowly adapting noise-floor estimate. These
 defaults are centralized in `AudioAnalysisConfig`; onset detection is not yet
 implemented.
@@ -322,13 +347,14 @@ delete the WAV and shows its current position, duration, and file path. A new
 practice session stops debug playback and replaces the previous recording. It
 also shows the actual sample rate, total and graded frame counts, the exercise
 start frame, and recording and graded durations.
-After preprocessing, the card adds a peak-preserving envelope/noise-floor
-graph synchronized to the complete WAV playback cursor. The graph keeps the
-count-in region visually separate from exercise time zero and bounds rendered
-data to roughly 1,500 points. A debug-only Storage Access Framework action can
-export one locale-independent CSV row per analysis frame with exercise time,
-representative raw and filtered samples, frame peak, frame RMS level, envelope,
-and noise floor. Analysis or export failure does not remove the playable WAV.
+After preprocessing, the card adds peak-preserving pre-notch and post-notch
+envelopes, the post-notch noise floor, expected metronome markers, and the WAV
+playback cursor. The graph keeps the count-in region visually separate from
+exercise time zero and bounds rendered data to roughly 1,500 points. A
+debug-only Storage Access Framework action exports one locale-independent CSV
+row per analysis frame with the existing fields plus pre/post notch levels and
+envelopes and the frozen tone/notch configuration. Analysis or export failure
+does not remove the playable WAV.
 Leaving the Practice screen releases both capture and playback resources. The
 recording pipeline remains present in release builds, but this playback card is
 compiled behind `BuildConfig.DEBUG` and is not shown there.
@@ -382,8 +408,10 @@ offsets. Release builds delete the temporary recording.
 
 This universal value corrects the tested phone-speaker/built-in-microphone
 pipeline only. Bluetooth and other routes can introduce different additional
-latency during practice. Drum onset detection and application of calibration
-to detected hits belong to the next PR.
+latency during practice. A 6000 Hz tone is a starting compromise and audibility
+and acoustic suppression still vary with phone speakers, headphones, Bluetooth
+codecs, microphone response, room acoustics, and playback volume. Drum onset
+detection remains deferred to PR 5.1.
 
 When microphone detection and hit matching are added, timing feedback will use
 a green ring for on-time hits, a blue ring for early hits, and a red ring for
@@ -420,13 +448,12 @@ Run Android lint:
 
 ## Planned version 1 work
 
-1. Output and microphone latency calibration
-2. Energy/envelope-based onset detection
-3. Detected-hit to expected-note matching
-4. Early, on-time, late, missed, and extra-hit judgements
-5. Hit-intensity measurement
-6. Immediate visual feedback
-7. Practice-session results
+1. Energy/envelope-based onset detection
+2. Detected-hit to expected-note matching
+3. Early, on-time, late, missed, and extra-hit judgements
+4. Hit-intensity measurement
+5. Immediate visual feedback
+6. Practice-session results
 
 Version 1 intentionally uses one generic rhythmic lane. Separate kick, snare,
 hi-hat, and tom lanes are future extensions.

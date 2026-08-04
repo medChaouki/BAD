@@ -1,6 +1,7 @@
 package com.titaniumharmonics.bad.audio
 
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
+import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
 
 private const val NANOS_PER_MILLISECOND = 1_000_000L
 
@@ -56,6 +57,8 @@ data class RecordedSession(
     val totalRecordedSampleFrames: Long,
     val exerciseStartSampleFrame: Long,
     val runtimeExercise: RuntimeExercise,
+    val metronomeSnapshot: SessionMetronomeSnapshot =
+        SessionMetronomeSnapshot.COMPATIBILITY_FALLBACK,
 ) {
     init {
         require(wavFilePath.isNotBlank()) { "wavFilePath must not be blank." }

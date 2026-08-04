@@ -1,5 +1,9 @@
 package com.titaniumharmonics.bad.audio.analysis
 
+import com.titaniumharmonics.bad.audio.metronome.MetronomeConfiguration
+import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
+import kotlin.math.PI
+import kotlin.math.sin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -95,6 +99,63 @@ class OfflineAudioAnalyzerTest {
         }
 
         assertTrue(exception is StopAnalysis)
+    }
+
+    @Test
+    fun sessionNotchSnapshotDrivesAlignedPreAndPostAnalysisAndPreservesTransient() {
+        val sampleRate = 48_000
+        val samples = ShortArray(sampleRate) { index ->
+            val tone = sin(2.0 * PI * 6_000.0 * index / sampleRate) * 0.35
+            val transient = if (index == sampleRate / 2) 0.6 else 0.0
+            ((tone + transient).coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
+        }
+        val wav = writeTestWav(samples, sampleRate)
+        val baseSession = recordedSessionForWav(wav, sampleRate, sampleRate.toLong(), 0L)
+        val session = baseSession.copy(
+            metronomeSnapshot = SessionMetronomeSnapshot(MetronomeConfiguration.DEFAULT),
+        )
+
+        val analysis = OfflineAudioAnalyzer().analyze(session)
+
+        assertEquals(analysis.frameCount, analysis.preNotchFrameLevels.size)
+        assertEquals(analysis.frameCount, analysis.preNotchEnvelope.size)
+        assertTrue(analysis.maximumMetronomeSuppression > 0.05f)
+        assertTrue(
+            analysis.preNotchFrameLevels.toList().average() >
+                analysis.frameLevels.toList().average() * 3.0,
+        )
+        assertTrue(analysis.maximumFramePeak > 0.45f)
+        assertEquals(analysis.frame(10).postNotchEnvelope, analysis.frame(10).envelope, 0.0f)
+    }
+
+    @Test
+    fun disabledNotchPreservesPreNotchMetricsAndSessionSnapshotBeatsGlobalChanges() {
+        val sampleRate = 44_100
+        val samples = ShortArray(sampleRate) { index ->
+            (sin(2.0 * PI * 5_000.0 * index / sampleRate) * 12_000).toInt().toShort()
+        }
+        val wav = writeTestWav(samples, sampleRate)
+        val baseSession = recordedSessionForWav(wav, sampleRate, sampleRate.toLong(), 0L)
+        val disabled = MetronomeConfiguration.DEFAULT
+            .withToneFrequency(5_000)
+            .copy(notch = MetronomeConfiguration.DEFAULT.notch.copy(
+                enabled = false,
+                centerFrequencyHz = 5_000,
+            ))
+        val analysis = OfflineAudioAnalyzer().analyze(
+            baseSession.copy(metronomeSnapshot = SessionMetronomeSnapshot(disabled)),
+        )
+
+        assertEquals(5_000, analysis.metronomeConfiguration.tone.frequencyHz)
+        assertEquals(
+            analysis.preNotchFrameLevels.toList(),
+            analysis.frameLevels.toList(),
+        )
+        assertEquals(
+            analysis.preNotchEnvelope.toList(),
+            analysis.envelope.toList(),
+        )
+        assertEquals(0.0f, analysis.maximumMetronomeSuppression, 0.0f)
     }
 
     private class StopAnalysis : RuntimeException()

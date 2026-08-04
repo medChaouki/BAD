@@ -71,6 +71,7 @@ import com.titaniumharmonics.bad.R
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
 import com.titaniumharmonics.bad.audio.RecordedSession
+import com.titaniumharmonics.bad.audio.SampleFrameTiming
 import com.titaniumharmonics.bad.audio.analysis.AudioAnalysis
 import com.titaniumharmonics.bad.audio.analysis.AudioAnalysisState
 import com.titaniumharmonics.bad.audio.analysis.DebugAnalysisTimeline
@@ -680,6 +681,12 @@ private fun DebugAnalysisSection(
                     appendLine("Maximum input: ${analysis.maximumNormalizedInputAmplitude}")
                     appendLine("Maximum frame peak: ${analysis.maximumFramePeak}")
                     appendLine("Maximum envelope: ${analysis.maximumEnvelope}")
+                    appendLine(
+                        "Notch: ${if (analysis.metronomeConfiguration.notch.enabled) "On" else "Off"} · " +
+                            "${analysis.metronomeConfiguration.notch.centerFrequencyHz} Hz · " +
+                            "Q ${analysis.metronomeConfiguration.notch.qFactor}",
+                    )
+                    appendLine("Maximum suppression: ${analysis.maximumMetronomeSuppression}")
                     append("Mean noise floor: ${analysis.meanNoiseFloor}")
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -711,15 +718,23 @@ private fun DebugEnvelopeGraph(
             maximumPointCount = maximumPointCount,
         )
     }
+    val expectedMetronomeSamples = remember(session, analysis) {
+        expectedMetronomeRecordingSamples(session, analysis)
+    }
     val cursor = timeline.cursor(playbackState)
     val countInColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-    val envelopeColor = MaterialTheme.colorScheme.primary
+    val preNotchColor = MaterialTheme.colorScheme.outline
+    val postNotchColor = MaterialTheme.colorScheme.primary
     val noiseColor = MaterialTheme.colorScheme.tertiary
+    val expectedBeatColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
     val cursorColor = MaterialTheme.colorScheme.error
     val boundaryColor = MaterialTheme.colorScheme.onSurface
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Count-in | Exercise envelope", style = MaterialTheme.typography.labelMedium)
+        Text(
+            "Dashed pre-notch · Solid post-notch · Thin noise floor · Beat markers",
+            style = MaterialTheme.typography.labelMedium,
+        )
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
@@ -734,23 +749,45 @@ private fun DebugEnvelopeGraph(
             fun graphY(value: Float): Float =
                 plotHeight - (value / graph.maximumValue).coerceIn(0.0f, 1.0f) * plotHeight
 
-            val envelopePath = Path()
+            val preNotchPath = Path()
+            val postNotchPath = Path()
             val noisePath = Path()
             graph.points.forEachIndexed { index, point ->
                 val x = size.width * timeline.normalizedWavPositionForExerciseSample(
                     point.exerciseSampleFrame,
                 )
-                val envelopeY = graphY(point.envelope)
+                val preNotchY = graphY(point.preNotchEnvelope)
+                val postNotchY = graphY(point.postNotchEnvelope)
                 val noiseY = graphY(point.noiseFloor)
                 if (index == 0) {
-                    envelopePath.moveTo(x, envelopeY)
+                    preNotchPath.moveTo(x, preNotchY)
+                    postNotchPath.moveTo(x, postNotchY)
                     noisePath.moveTo(x, noiseY)
                 } else {
-                    envelopePath.lineTo(x, envelopeY)
+                    preNotchPath.lineTo(x, preNotchY)
+                    postNotchPath.lineTo(x, postNotchY)
                     noisePath.lineTo(x, noiseY)
                 }
             }
-            drawPath(envelopePath, envelopeColor, style = Stroke(width = 3.dp.toPx()))
+            expectedMetronomeSamples.forEach { sampleFrame ->
+                val x = size.width * sampleFrame.toFloat() / session.totalRecordedSampleFrames
+                drawLine(
+                    color = expectedBeatColor,
+                    start = Offset(x, 0.0f),
+                    end = Offset(x, size.height),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.0f, 5.0f)),
+                )
+            }
+            drawPath(
+                preNotchPath,
+                preNotchColor,
+                style = Stroke(
+                    width = 2.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.0f, 5.0f)),
+                ),
+            )
+            drawPath(postNotchPath, postNotchColor, style = Stroke(width = 3.dp.toPx()))
             drawPath(noisePath, noiseColor, style = Stroke(width = 2.dp.toPx()))
             drawLine(
                 color = boundaryColor,
@@ -795,6 +832,32 @@ private fun DebugEnvelopeGraph(
             style = MaterialTheme.typography.labelSmall,
         )
     }
+}
+
+private fun expectedMetronomeRecordingSamples(
+    session: RecordedSession,
+    analysis: AudioAnalysis,
+): LongArray {
+    val timing = ExerciseTiming(session.runtimeExercise)
+    val countInStart = (
+        session.exerciseStartSampleFrame -
+            SampleFrameTiming.durationNanosToSampleFrames(
+                timing.countInDurationNanos,
+                session.audioFormat.sampleRateHz,
+            )
+        ).coerceAtLeast(0L)
+    val countIn = LongArray(timing.countInQuarterNoteCount) { index ->
+        countInStart + SampleFrameTiming.durationNanosToSampleFrames(
+            index * timing.beatDurationNanos,
+            session.audioFormat.sampleRateHz,
+        )
+    }
+    val exercise = LongArray(analysis.expectedMetronomeExerciseSamples.size) { index ->
+        session.exerciseRelativeSampleToRecordingSample(
+            analysis.expectedMetronomeExerciseSamples[index],
+        )
+    }
+    return countIn + exercise
 }
 
 private const val MAXIMUM_DEBUG_GRAPH_POINTS = 1_500

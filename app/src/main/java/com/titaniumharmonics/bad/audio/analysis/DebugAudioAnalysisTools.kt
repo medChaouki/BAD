@@ -13,7 +13,9 @@ import kotlin.math.ceil
 object DebugAudioAnalysisCsvExporter {
     const val HEADER =
         "exercise_time_ms,raw_sample,filtered_sample,frame_peak," +
-            "frame_level,envelope,noise_floor"
+            "frame_level,envelope,noise_floor,pre_notch_level,post_notch_level," +
+            "pre_notch_envelope,post_notch_envelope,metronome_frequency_hz," +
+            "notch_center_hz,notch_q,notch_enabled"
 
     fun write(analysis: AudioAnalysis, output: OutputStream) {
         try {
@@ -28,6 +30,22 @@ object DebugAudioAnalysisCsvExporter {
                     writer.append(',').append(frame.frameLevel.stableString())
                     writer.append(',').append(frame.envelope.stableString())
                     writer.append(',').append(frame.noiseFloor.stableString())
+                    writer.append(',').append(frame.preNotchFrameLevel.stableString())
+                    writer.append(',').append(frame.postNotchFrameLevel.stableString())
+                    writer.append(',').append(frame.preNotchEnvelope.stableString())
+                    writer.append(',').append(frame.postNotchEnvelope.stableString())
+                    writer.append(',').append(
+                        analysis.metronomeConfiguration.tone.frequencyHz.toString(),
+                    )
+                    writer.append(',').append(
+                        analysis.metronomeConfiguration.notch.centerFrequencyHz.toString(),
+                    )
+                    writer.append(',').append(
+                        analysis.metronomeConfiguration.notch.qFactor.stableString(),
+                    )
+                    writer.append(',').append(
+                        analysis.metronomeConfiguration.notch.enabled.toString(),
+                    )
                     writer.newLine()
                 }
             }
@@ -52,7 +70,8 @@ object DebugAudioAnalysisCsvExporter {
 
 data class AnalysisGraphPoint(
     val exerciseSampleFrame: Long,
-    val envelope: Float,
+    val preNotchEnvelope: Float,
+    val postNotchEnvelope: Float,
     val noiseFloor: Float,
 )
 
@@ -73,7 +92,8 @@ object PeakPreservingGraphDownsampler {
         val points = indexes.map { index ->
             AnalysisGraphPoint(
                 exerciseSampleFrame = analysis.frameCenterExerciseSamples[index],
-                envelope = analysis.envelope[index],
+                preNotchEnvelope = analysis.preNotchEnvelope[index],
+                postNotchEnvelope = analysis.envelope[index],
                 noiseFloor = analysis.noiseFloor[index],
             )
         }
@@ -81,6 +101,7 @@ object PeakPreservingGraphDownsampler {
             points = Collections.unmodifiableList(points),
             maximumValue = maxOf(
                 analysis.maximumEnvelope,
+                maximumPreNotchEnvelope(analysis),
                 maximumNoiseFloor(analysis),
                 MINIMUM_GRAPH_SCALE,
             ),
@@ -91,31 +112,36 @@ object PeakPreservingGraphDownsampler {
         analysis: AudioAnalysis,
         maximumPointCount: Int,
     ): List<Int> {
-        val bucketCount = maximumPointCount / 2
+        val bucketCount = (maximumPointCount / 4).coerceAtLeast(1)
         val bucketSize = ceil(analysis.frameCount.toDouble() / bucketCount).toInt()
         val selected = ArrayList<Int>(maximumPointCount)
         var start = 0
         while (start < analysis.frameCount && selected.size < maximumPointCount) {
             val end = minOf(analysis.frameCount, start + bucketSize)
-            var minimumIndex = start
-            var maximumIndex = start
+            var minimumPreIndex = start
+            var maximumPreIndex = start
+            var minimumPostIndex = start
+            var maximumPostIndex = start
             for (index in start + 1 until end) {
-                if (analysis.envelope[index] < analysis.envelope[minimumIndex]) {
-                    minimumIndex = index
+                if (analysis.preNotchEnvelope[index] < analysis.preNotchEnvelope[minimumPreIndex]) {
+                    minimumPreIndex = index
                 }
-                if (analysis.envelope[index] > analysis.envelope[maximumIndex]) {
-                    maximumIndex = index
+                if (analysis.preNotchEnvelope[index] > analysis.preNotchEnvelope[maximumPreIndex]) {
+                    maximumPreIndex = index
+                }
+                if (analysis.envelope[index] < analysis.envelope[minimumPostIndex]) {
+                    minimumPostIndex = index
+                }
+                if (analysis.envelope[index] > analysis.envelope[maximumPostIndex]) {
+                    maximumPostIndex = index
                 }
             }
-            if (minimumIndex == maximumIndex) {
-                selected += minimumIndex
-            } else if (minimumIndex < maximumIndex) {
-                selected += minimumIndex
-                if (selected.size < maximumPointCount) selected += maximumIndex
-            } else {
-                selected += maximumIndex
-                if (selected.size < maximumPointCount) selected += minimumIndex
-            }
+            listOf(minimumPreIndex, maximumPreIndex, minimumPostIndex, maximumPostIndex)
+                .distinct()
+                .sorted()
+                .forEach { index ->
+                    if (selected.size < maximumPointCount) selected += index
+                }
             start = end
         }
         return selected
@@ -133,6 +159,14 @@ object PeakPreservingGraphDownsampler {
         var maximum = 0.0f
         repeat(analysis.noiseFloor.size) { index ->
             maximum = maxOf(maximum, analysis.noiseFloor[index])
+        }
+        return maximum
+    }
+
+    private fun maximumPreNotchEnvelope(analysis: AudioAnalysis): Float {
+        var maximum = 0.0f
+        repeat(analysis.preNotchEnvelope.size) { index ->
+            maximum = maxOf(maximum, analysis.preNotchEnvelope[index])
         }
         return maximum
     }

@@ -16,6 +16,9 @@ import com.titaniumharmonics.bad.audio.analysis.AudioAnalysisState
 import com.titaniumharmonics.bad.audio.analysis.DebugAudioAnalysisCsvExporter
 import com.titaniumharmonics.bad.audio.analysis.DebugCsvExportState
 import com.titaniumharmonics.bad.audio.analysis.OfflineAudioAnalyzer
+import com.titaniumharmonics.bad.audio.metronome.MetronomeConfigurationRepository
+import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
+import com.titaniumharmonics.bad.audio.metronome.SharedPreferencesMetronomeConfigurationStore
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseCompilationResult
 import com.titaniumharmonics.bad.exercise.ExerciseCompiler
@@ -52,6 +55,9 @@ class PracticeViewModel(
         ContentResolverExerciseDocumentStore(application.contentResolver)
     private val metronomePlayer: MetronomePlayer = AudioTrackMetronome(clock)
     private val sessionElapsedClock = SessionElapsedClock(clock)
+    private val metronomeConfigurationRepository = MetronomeConfigurationRepository(
+        SharedPreferencesMetronomeConfigurationStore(application),
+    )
 
     private val mutableUiState = MutableStateFlow(PracticeUiState())
     val uiState: StateFlow<PracticeUiState> = mutableUiState.asStateFlow()
@@ -89,6 +95,7 @@ class PracticeViewModel(
     private var audioAnalysisJob: Job? = null
     private var csvExportJob: Job? = null
     private var phaseBeforePause: PracticePhase = PracticePhase.RUNNING
+    private var activeMetronomeSnapshot: SessionMetronomeSnapshot? = null
 
     fun loadExercise(documentUri: String) {
         if (loadJob?.isActive == true) return
@@ -175,6 +182,11 @@ class PracticeViewModel(
         val state = mutableUiState.value
         val exercise = state.playbackExercise ?: return
         val downbeatsOnly = state.playbackSettings?.downbeatsOnly == true
+        val metronomeSnapshot = SessionMetronomeSnapshot(
+            configuration = metronomeConfigurationRepository.load(),
+            downbeatsOnly = downbeatsOnly,
+        )
+        activeMetronomeSnapshot = metronomeSnapshot
 
         val timing = ExerciseTiming(exercise)
         val progressCalculator = SessionProgressCalculator(timing)
@@ -197,10 +209,11 @@ class PracticeViewModel(
                 }
                 val playbackStartedNanos = withContext(Dispatchers.IO) {
                     debugPositionJob?.cancel()
-                    practiceRecordingCoordinator.startSession(exercise)
+                    practiceRecordingCoordinator.startSession(exercise, metronomeSnapshot)
                     metronomePlayer.start(
                         exercise = exercise,
                         downbeatsOnly = downbeatsOnly,
+                        configuration = metronomeSnapshot.configuration,
                     )
                 }
                 sessionElapsedClock.start(playbackStartedNanos)
@@ -362,7 +375,8 @@ class PracticeViewModel(
         )
         practiceRecordingCoordinator.beginResumeCountIn()
         val countInStartedNanos = withContext(Dispatchers.IO) {
-            metronomePlayer.startResumeCountIn(exercise)
+            val configuration = checkNotNull(activeMetronomeSnapshot).configuration
+            metronomePlayer.startResumeCountIn(exercise, configuration)
         }
 
         while (true) {
@@ -420,6 +434,7 @@ class PracticeViewModel(
         audioControlJob = null
         playbackJob?.cancel()
         sessionElapsedClock.reset()
+        activeMetronomeSnapshot = null
 
         if (!playerWasVisible) return
         val exercise = state.playbackExercise ?: return

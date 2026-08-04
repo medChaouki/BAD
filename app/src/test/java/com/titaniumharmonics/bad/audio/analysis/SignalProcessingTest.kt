@@ -84,6 +84,48 @@ class SignalProcessingTest {
     }
 
     @Test
+    fun biquadNotchAttenuatesCenterMoreThanOffFrequencyAtBothRates() {
+        listOf(48_000, 44_100).forEach { sampleRate ->
+            val center = sineWave(6_000.0, sampleRate, sampleRate)
+            val offFrequency = sineWave(3_000.0, sampleRate, sampleRate)
+            BiquadNotchFilter.filterInPlace(center, sampleRate, 6_000.0, 10.0)
+            BiquadNotchFilter.filterInPlace(offFrequency, sampleRate, 6_000.0, 10.0)
+
+            assertTrue(rms(center.copyOfRange(sampleRate / 4, sampleRate)) < 0.03)
+            assertTrue(rms(offFrequency.copyOfRange(sampleRate / 4, sampleRate)) > 0.60)
+            assertTrue(center.all(Float::isFinite))
+            assertTrue(offFrequency.all(Float::isFinite))
+        }
+    }
+
+    @Test
+    fun notchQControlsWidthDisabledPathIsExactAndImpulseRemainsVisible() {
+        val signal = sineWave(5_500.0, 48_000, 48_000)
+        val wide = BiquadNotchFilter.filter(signal, 48_000, 6_000.0, 3.0, true)
+        val narrow = BiquadNotchFilter.filter(signal, 48_000, 6_000.0, 25.0, true)
+        assertTrue(rms(wide.copyOfRange(12_000, 48_000)) < rms(narrow.copyOfRange(12_000, 48_000)))
+        assertArrayEquals(
+            signal,
+            BiquadNotchFilter.filter(signal, 48_000, 6_000.0, 10.0, false),
+            0.0f,
+        )
+
+        val transientPlusTone = sineWave(6_000.0, 48_000, 2_000).also { it[1_000] += 1.0f }
+        BiquadNotchFilter.filterInPlace(transientPlusTone, 48_000, 6_000.0, 10.0)
+        assertTrue(abs(transientPlusTone[1_000]) > 0.75f)
+    }
+
+    @Test
+    fun notchRejectsInvalidConfiguration() {
+        assertThrows(IllegalArgumentException::class.java) {
+            BiquadNotchFilter.filterInPlace(FloatArray(10), 48_000, 24_000.0, 10.0)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            BiquadNotchFilter.filterInPlace(FloatArray(10), 48_000, 6_000.0, Double.NaN)
+        }
+    }
+
+    @Test
     fun frameMetricsUseCenterAndIncludeUnpaddedPartialFinalFrame() {
         val raw = shortArrayOf(0, 1_000, 2_000, 3_000, 4_000, 5_000, 6_000)
         val filtered = floatArrayOf(0.0f, 0.5f, -1.0f, 0.25f, 0.0f, 0.1f, -0.3f)
@@ -145,4 +187,9 @@ class SignalProcessingTest {
 
     private fun rms(values: FloatArray): Double =
         sqrt(values.sumOf { it.toDouble() * it } / values.size)
+
+    private fun sineWave(frequencyHz: Double, sampleRateHz: Int, sampleCount: Int) =
+        FloatArray(sampleCount) { index ->
+            sin(2.0 * PI * frequencyHz * index / sampleRateHz).toFloat()
+        }
 }

@@ -1,5 +1,7 @@
 package com.titaniumharmonics.bad.audio
 
+import com.titaniumharmonics.bad.audio.metronome.MetronomeConfiguration
+import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -58,6 +60,10 @@ class RecordedSessionTest {
     @Test
     fun completedSession_preservesSnapshotAndDerivesCountsAndDurations() {
         val exercise = runtimeExerciseForAudioTest()
+        val metronomeSnapshot = SessionMetronomeSnapshot(
+            configuration = MetronomeConfiguration.DEFAULT.withToneFrequency(5_000),
+            downbeatsOnly = true,
+        )
         val session = RecordedSession(
             wavFilePath = "recording.wav",
             audioFormat = PcmAudioFormat(
@@ -68,13 +74,28 @@ class RecordedSessionTest {
             totalRecordedSampleFrames = 240_000L,
             exerciseStartSampleFrame = 48_000L,
             runtimeExercise = exercise,
+            metronomeSnapshot = metronomeSnapshot,
         )
 
         assertSame(exercise, session.runtimeExercise)
+        assertEquals(metronomeSnapshot, session.metronomeSnapshot)
         assertEquals(48_000L, session.initialCountInSampleFrames)
         assertEquals(192_000L, session.gradedExerciseSampleFrames)
         assertEquals(5_000L, session.recordingDurationMillis)
         assertEquals(4_000L, session.gradedExerciseDurationMillis)
+    }
+
+    @Test
+    fun missingSnapshotUsesDocumentedCompatibilityDefaults() {
+        val session = recordedSessionFile(
+            exerciseStartSampleFrame = 48_000L,
+            totalSampleFrames = 144_000L,
+        )
+
+        assertEquals(
+            SessionMetronomeSnapshot.COMPATIBILITY_FALLBACK,
+            session.metronomeSnapshot,
+        )
     }
 
     @Test

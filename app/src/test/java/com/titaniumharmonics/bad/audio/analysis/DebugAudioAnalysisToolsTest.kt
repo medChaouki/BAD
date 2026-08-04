@@ -2,6 +2,7 @@ package com.titaniumharmonics.bad.audio.analysis
 
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
+import com.titaniumharmonics.bad.audio.metronome.MetronomeConfiguration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -33,8 +34,16 @@ class DebugAudioAnalysisToolsTest {
 
             assertEquals(DebugAudioAnalysisCsvExporter.HEADER, lines[0])
             assertEquals(3, lines.size)
-            assertEquals("2.5,0.25,0.2,0.3,0.1,0.15,0.01", lines[1])
-            assertEquals("4.5,-0.5,-0.4,0.6,0.2,0.35,0.02", lines[2])
+            assertEquals(
+                "2.5,0.25,0.2,0.3,0.1,0.15,0.01,0.1,0.1,0.15,0.15," +
+                    "6000,6000,10.0,true",
+                lines[1],
+            )
+            assertEquals(
+                "4.5,-0.5,-0.4,0.6,0.2,0.35,0.02,0.2,0.2,0.35,0.35," +
+                    "6000,6000,10.0,true",
+                lines[2],
+            )
             assertFalse(lines.any { "NaN" in it || "Infinity" in it })
         } finally {
             Locale.setDefault(previousLocale)
@@ -88,6 +97,8 @@ class DebugAudioAnalysisToolsTest {
         val envelope = FloatArray(10_000) { 0.1f }
         envelope[1_234] = 1.0f
         envelope[7_000] = 0.0f
+        val preEnvelope = FloatArray(10_000) { 0.2f }
+        preEnvelope[8_000] = 1.4f
         val analysis = analysisFixture(
             centers = LongArray(envelope.size) { it.toLong() },
             raw = FloatArray(envelope.size),
@@ -95,15 +106,29 @@ class DebugAudioAnalysisToolsTest {
             peaks = envelope.copyOf(),
             levels = envelope.copyOf(),
             envelope = envelope,
+            preEnvelope = preEnvelope,
             noise = FloatArray(envelope.size) { 0.02f },
         )
 
         val graph = PeakPreservingGraphDownsampler.downsample(analysis, 1_500)
 
         assertTrue(graph.points.size <= 1_500)
-        assertTrue(graph.points.any { it.exerciseSampleFrame == 1_234L && it.envelope == 1.0f })
-        assertTrue(graph.points.any { it.exerciseSampleFrame == 7_000L && it.envelope == 0.0f })
+        assertTrue(
+            graph.points.any {
+                it.exerciseSampleFrame == 1_234L && it.postNotchEnvelope == 1.0f
+            },
+        )
+        assertTrue(
+            graph.points.any {
+                it.exerciseSampleFrame == 7_000L && it.postNotchEnvelope == 0.0f
+            },
+        )
         assertTrue(graph.points.all { it.noiseFloor == 0.02f })
+        assertTrue(
+            graph.points.any {
+                it.exerciseSampleFrame == 8_000L && it.preNotchEnvelope == 1.4f
+            },
+        )
     }
 
     @Test
@@ -133,6 +158,7 @@ class DebugAudioAnalysisToolsTest {
         peaks: FloatArray = floatArrayOf(0.2f),
         levels: FloatArray = floatArrayOf(0.1f),
         envelope: FloatArray = floatArrayOf(0.15f),
+        preEnvelope: FloatArray = envelope,
         noise: FloatArray = floatArrayOf(0.01f),
     ): AudioAnalysis = AudioAnalysis(
         sampleRateHz = 48_000,
@@ -142,6 +168,8 @@ class DebugAudioAnalysisToolsTest {
         frameCenterExerciseSamples = ImmutableLongSeries.copyOf(centers),
         representativeRawSamples = ImmutableFloatSeries.copyOf(raw),
         representativeFilteredSamples = ImmutableFloatSeries.copyOf(filtered),
+        preNotchFrameLevels = ImmutableFloatSeries.copyOf(levels),
+        preNotchEnvelope = ImmutableFloatSeries.copyOf(preEnvelope),
         framePeaks = ImmutableFloatSeries.copyOf(peaks),
         frameLevels = ImmutableFloatSeries.copyOf(levels),
         envelope = ImmutableFloatSeries.copyOf(envelope),
@@ -151,5 +179,8 @@ class DebugAudioAnalysisToolsTest {
         maximumEnvelope = envelope.maxOrNull() ?: 0.0f,
         meanNoiseFloor = noise.average().toFloat(),
         configuration = AudioAnalysisConfig(),
+        metronomeConfiguration = MetronomeConfiguration.DEFAULT,
+        expectedMetronomeExerciseSamples = ImmutableLongSeries.copyOf(longArrayOf()),
+        maximumMetronomeSuppression = 0.0f,
     )
 }

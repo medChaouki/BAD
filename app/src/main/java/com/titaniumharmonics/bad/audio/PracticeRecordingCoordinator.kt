@@ -1,6 +1,7 @@
 package com.titaniumharmonics.bad.audio
 
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
+import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
 import java.io.File
 
 enum class PracticeRecordingPhase {
@@ -27,13 +28,19 @@ class PracticeRecordingCoordinator(
         private set
 
     private var runtimeExercise: RuntimeExercise? = null
+    private var metronomeSnapshot: SessionMetronomeSnapshot? = null
     private var exerciseStartSampleFrame: Long? = null
     private var phaseBeforePause: PracticeRecordingPhase? = null
 
-    fun startSession(exercise: RuntimeExercise) {
+    fun startSession(
+        exercise: RuntimeExercise,
+        sessionMetronomeSnapshot: SessionMetronomeSnapshot =
+            SessionMetronomeSnapshot.COMPATIBILITY_FALLBACK,
+    ) {
         playbackController.deleteRecording()
         completedSession = null
         runtimeExercise = exercise
+        metronomeSnapshot = sessionMetronomeSnapshot
         exerciseStartSampleFrame = null
         phaseBeforePause = null
         try {
@@ -42,6 +49,7 @@ class PracticeRecordingCoordinator(
         } catch (exception: Exception) {
             phase = PracticeRecordingPhase.ERROR
             runtimeExercise = null
+            metronomeSnapshot = null
             throw exception
         }
     }
@@ -108,6 +116,9 @@ class PracticeRecordingCoordinator(
         val startSampleFrame = checkNotNull(exerciseStartSampleFrame) {
             "Exercise-start sample frame was not captured."
         }
+        val sessionMetronomeSnapshot = checkNotNull(metronomeSnapshot) {
+            "Session metronome configuration is unavailable."
+        }
         return try {
             val recording = recorder.finish()
             check(File(recording.filePath).isFile) {
@@ -119,6 +130,7 @@ class PracticeRecordingCoordinator(
                 totalRecordedSampleFrames = recording.totalSampleFrames,
                 exerciseStartSampleFrame = startSampleFrame,
                 runtimeExercise = exercise,
+                metronomeSnapshot = sessionMetronomeSnapshot,
             )
             completedSession = session
             phase = PracticeRecordingPhase.COMPLETED
@@ -140,6 +152,7 @@ class PracticeRecordingCoordinator(
         recorder.cancel()
         completedSession = null
         runtimeExercise = null
+        metronomeSnapshot = null
         exerciseStartSampleFrame = null
         phaseBeforePause = null
         phase = PracticeRecordingPhase.CANCELLED
@@ -167,6 +180,7 @@ class PracticeRecordingCoordinator(
         runCatching { recorder.cancel() }
         completedSession = null
         runtimeExercise = null
+        metronomeSnapshot = null
         exerciseStartSampleFrame = null
         phaseBeforePause = null
         phase = PracticeRecordingPhase.ERROR

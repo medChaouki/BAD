@@ -5,6 +5,8 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.sqrt
+import kotlin.math.cos
+import kotlin.math.sin
 
 object Pcm16Normalizer {
     fun normalize(sample: Short): Float = when {
@@ -62,6 +64,60 @@ object FirstOrderHighPassFilter {
         enabled: Boolean,
     ): FloatArray = signal.copyOf().also { output ->
         if (enabled) filterInPlace(output, sampleRateHz, cutoffHz)
+    }
+}
+
+object BiquadNotchFilter {
+    fun filterInPlace(
+        signal: FloatArray,
+        sampleRateHz: Int,
+        centerFrequencyHz: Double,
+        qFactor: Double,
+    ) {
+        require(sampleRateHz > 0)
+        require(centerFrequencyHz.isFinite() && centerFrequencyHz > 0.0)
+        require(centerFrequencyHz < sampleRateHz / 2.0)
+        require(qFactor.isFinite() && qFactor > 0.0)
+        if (signal.isEmpty()) return
+
+        val omega = 2.0 * PI * centerFrequencyHz / sampleRateHz
+        val cosine = cos(omega)
+        val alpha = sin(omega) / (2.0 * qFactor)
+        val a0 = 1.0 + alpha
+        val b0 = 1.0 / a0
+        val b1 = -2.0 * cosine / a0
+        val b2 = 1.0 / a0
+        val a1 = -2.0 * cosine / a0
+        val a2 = (1.0 - alpha) / a0
+
+        var input1 = 0.0
+        var input2 = 0.0
+        var output1 = 0.0
+        var output2 = 0.0
+        signal.indices.forEach { index ->
+            val input = signal[index].toDouble()
+            require(input.isFinite()) { "Notch-filter input must be finite." }
+            val output = b0 * input + b1 * input1 + b2 * input2 -
+                a1 * output1 - a2 * output2
+            require(output.isFinite()) { "Notch filter became numerically unstable." }
+            signal[index] = output.coerceIn(-2.0, 2.0).toFloat()
+            input2 = input1
+            input1 = input
+            output2 = output1
+            output1 = output
+        }
+    }
+
+    fun filter(
+        signal: FloatArray,
+        sampleRateHz: Int,
+        centerFrequencyHz: Double,
+        qFactor: Double,
+        enabled: Boolean,
+    ): FloatArray = signal.copyOf().also { output ->
+        if (enabled) {
+            filterInPlace(output, sampleRateHz, centerFrequencyHz, qFactor)
+        }
     }
 }
 
