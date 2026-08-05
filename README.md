@@ -339,7 +339,35 @@ as its exercise timestamp, including the final partial frame without zero
 padding. Post-notch frame peak and RMS level feed a transient envelope with 2 ms attack
 and 12 ms release, followed by a slowly adapting noise-floor estimate. These
 defaults are centralized in `AudioAnalysisConfig`; onset detection is not yet
-implemented.
+implemented by this preprocessing stage itself.
+
+After preprocessing succeeds, a second background stage performs offline
+drum-hit detection from the post-notch analysis. It uses an adaptive threshold
+equal to the larger of the configured absolute minimum and noise floor
+multiplier, then applies hysteresis so a ringing decay normally creates only
+one candidate. A configurable look-back locates the earliest meaningful
+attack frame; the peak remains a separate measurement found in a forward
+search window. Candidate timestamps use frame-center exercise samples.
+
+Only candidate-local PCM windows are transformed by a pure Kotlin radix-2 FFT
+with a Hann window. The default 1024-point, 16 ms analysis compares energy in a
+600 Hz band around the frozen session metronome frequency with broadband
+residual energy and spectral spread. Public classification is strictly
+`DRUM` or `METRONOME`. Proximity to a scheduled click is never sufficient for
+rejection: narrow-band concentration, weak broadband residual, and spectral
+confidence must also agree. The safe default retains uncertain candidates as
+drum hits with reduced confidence. A 35 ms retrigger interval keeps the
+stronger peak, with equal peaks retaining the earlier candidate.
+
+Every threshold, onset, spacing, confidence, FFT, and rejection parameter is
+available directly in Settings with validation, units, persistence, and reset.
+The app freezes those settings and the active timing calibration in an
+immutable `SessionDetectionSnapshot` when practice starts. Detection never
+reads newer global settings while processing that session. Calibration keeps
+both raw and corrected samples and applies
+`calibratedHitSample = rawHitSample - convertedCalibrationOffset`; a corrected
+sample before exercise zero remains negative instead of being silently
+clamped.
 
 Debug builds show a temporary **Debug: Recorded Audio** card after natural
 completion. It uses Android `MediaPlayer` to play, pause, stop, replay, or
@@ -349,19 +377,24 @@ also shows the actual sample rate, total and graded frame counts, the exercise
 start frame, and recording and graded durations.
 After preprocessing, the card adds peak-preserving pre-notch and post-notch
 envelopes, the post-notch noise floor, expected metronome markers, and the WAV
-playback cursor. The graph keeps the count-in region visually separate from
+playback cursor. It also displays the adaptive threshold, alternating
+red/blue expected exercise markers, raw and calibrated onsets, measured peaks,
+and rejected metronome candidates. The graph keeps the count-in region visually separate from
 exercise time zero and bounds rendered data to roughly 1,500 points. A
 debug-only Storage Access Framework action exports one locale-independent CSV
-row per analysis frame with the existing fields plus pre/post notch levels and
-envelopes and the frozen tone/notch configuration. Analysis or export failure
+row per analysis frame with pre/post notch values, adaptive threshold, candidate
+spectral metrics, classification, raw/calibrated samples, and confidence. A
+second compact CSV contains one row per accepted or rejected candidate.
+Analysis, detection, or export failure
 does not remove the playable WAV.
 Leaving the Practice screen releases both capture and playback resources. The
 recording pipeline remains present in release builds, but this playback card is
 compiled behind `BuildConfig.DEBUG` and is not shown there.
 
 Current practice recordings retain structural software sample alignment. The
-calibration below measures the remaining fixed phone audio-path offset; a later
-PR will apply it when detected hits are introduced.
+calibration below measures the remaining fixed phone audio-path offset and is
+now applied to offline detected hits. Hit-to-note matching, timing judgement,
+statistics, and results UI remain intentionally deferred.
 
 ## Timing calibration
 
@@ -394,7 +427,7 @@ calibrationOffsetSamples = recordedClickSample - expectedClickSample
 ```
 
 A positive value means the speaker click arrived later in the recorded PCM
-than its scheduled reference. Future onset processing will correct a raw hit
+than its scheduled reference. Offline onset processing corrects a raw hit
 with `rawExerciseRelativeHitSample - calibrationOffsetSamples`. When sample
 rates differ, the stored offset is converted by duration and rounded to the
 nearest sample, with exact half-sample ties rounded away from zero.

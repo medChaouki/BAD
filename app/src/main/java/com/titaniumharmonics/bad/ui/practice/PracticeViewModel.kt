@@ -15,10 +15,18 @@ import com.titaniumharmonics.bad.audio.MetronomePlayer
 import com.titaniumharmonics.bad.audio.analysis.AudioAnalysisState
 import com.titaniumharmonics.bad.audio.analysis.DebugAudioAnalysisCsvExporter
 import com.titaniumharmonics.bad.audio.analysis.DebugCsvExportState
+import com.titaniumharmonics.bad.audio.analysis.DebugHitCandidateCsvExporter
 import com.titaniumharmonics.bad.audio.analysis.OfflineAudioAnalyzer
 import com.titaniumharmonics.bad.audio.metronome.MetronomeConfigurationRepository
 import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
 import com.titaniumharmonics.bad.audio.metronome.SharedPreferencesMetronomeConfigurationStore
+import com.titaniumharmonics.bad.audio.calibration.SharedPreferencesTimingCalibrationStore
+import com.titaniumharmonics.bad.audio.calibration.TimingCalibrationRepository
+import com.titaniumharmonics.bad.audio.detection.HitDetectionConfigurationRepository
+import com.titaniumharmonics.bad.audio.detection.SessionDetectionSnapshot
+import com.titaniumharmonics.bad.audio.detection.SharedPreferencesHitDetectionConfigurationStore
+import com.titaniumharmonics.bad.audio.detection.HitDetectionState
+import com.titaniumharmonics.bad.audio.detection.OfflineDrumHitDetector
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseCompilationResult
 import com.titaniumharmonics.bad.exercise.ExerciseCompiler
@@ -58,6 +66,12 @@ class PracticeViewModel(
     private val metronomeConfigurationRepository = MetronomeConfigurationRepository(
         SharedPreferencesMetronomeConfigurationStore(application),
     )
+    private val hitDetectionConfigurationRepository = HitDetectionConfigurationRepository(
+        SharedPreferencesHitDetectionConfigurationStore(application),
+    )
+    private val timingCalibrationRepository = TimingCalibrationRepository(
+        SharedPreferencesTimingCalibrationStore(application),
+    )
 
     private val mutableUiState = MutableStateFlow(PracticeUiState())
     val uiState: StateFlow<PracticeUiState> = mutableUiState.asStateFlow()
@@ -76,6 +90,11 @@ class PracticeViewModel(
                 } else {
                     state.audioAnalysis
                 },
+                hitDetection = if (completedSession == null) {
+                    HitDetectionState.NotStarted
+                } else {
+                    state.hitDetection
+                },
                 debugRecording = debugState,
             )
         },
@@ -85,6 +104,7 @@ class PracticeViewModel(
         playbackController = debugRecordingController,
     )
     private val offlineAudioAnalyzer = OfflineAudioAnalyzer()
+    private val offlineDrumHitDetector = OfflineDrumHitDetector()
 
     private var loadJob: Job? = null
     private var playbackJob: Job? = null
@@ -186,6 +206,10 @@ class PracticeViewModel(
             configuration = metronomeConfigurationRepository.load(),
             downbeatsOnly = downbeatsOnly,
         )
+        val detectionSnapshot = SessionDetectionSnapshot(
+            configuration = hitDetectionConfigurationRepository.load(),
+            timingCalibration = timingCalibrationRepository.activeCalibration(),
+        )
         activeMetronomeSnapshot = metronomeSnapshot
 
         val timing = ExerciseTiming(exercise)
@@ -197,6 +221,7 @@ class PracticeViewModel(
             countInBeatsRemaining = timing.countInQuarterNoteCount,
             recordedSession = null,
             audioAnalysis = AudioAnalysisState.NotStarted,
+            hitDetection = HitDetectionState.NotStarted,
             debugCsvExport = DebugCsvExportState.NotStarted,
             errorMessage = null,
         )
@@ -209,7 +234,11 @@ class PracticeViewModel(
                 }
                 val playbackStartedNanos = withContext(Dispatchers.IO) {
                     debugPositionJob?.cancel()
-                    practiceRecordingCoordinator.startSession(exercise, metronomeSnapshot)
+                    practiceRecordingCoordinator.startSession(
+                        exercise,
+                        metronomeSnapshot,
+                        detectionSnapshot,
+                    )
                     metronomePlayer.start(
                         exercise = exercise,
                         downbeatsOnly = downbeatsOnly,
@@ -511,6 +540,7 @@ class PracticeViewModel(
         mutableUiState.value = mutableUiState.value.copy(
             recordedSession = null,
             audioAnalysis = AudioAnalysisState.NotStarted,
+            hitDetection = HitDetectionState.NotStarted,
             debugCsvExport = DebugCsvExportState.NotStarted,
         )
     }
@@ -518,6 +548,8 @@ class PracticeViewModel(
     fun exportDebugAnalysisCsv(documentUri: String) {
         val analysis = (mutableUiState.value.audioAnalysis as? AudioAnalysisState.Ready)
             ?.analysis ?: return
+        val detection = (mutableUiState.value.hitDetection as? HitDetectionState.Ready)
+            ?.result ?: return
         csvExportJob?.cancel()
         mutableUiState.value = mutableUiState.value.copy(
             debugCsvExport = DebugCsvExportState.Exporting,
@@ -528,7 +560,7 @@ class PracticeViewModel(
                     documentUri.toUri(),
                     "w",
                 ) ?: error("Unable to open the selected CSV destination.")
-                DebugAudioAnalysisCsvExporter.write(analysis, output)
+                DebugAudioAnalysisCsvExporter.write(analysis, output, detection)
                 mutableUiState.value = mutableUiState.value.copy(
                     debugCsvExport = DebugCsvExportState.Exported(
                         "Temporary debug CSV exported.",
@@ -546,6 +578,37 @@ class PracticeViewModel(
         }
     }
 
+    fun exportDebugHitCsv(documentUri: String) {
+        val detection = (mutableUiState.value.hitDetection as? HitDetectionState.Ready)
+            ?.result ?: return
+        csvExportJob?.cancel()
+        mutableUiState.value = mutableUiState.value.copy(
+            debugCsvExport = DebugCsvExportState.Exporting,
+        )
+        csvExportJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val output = getApplication<Application>().contentResolver.openOutputStream(
+                    documentUri.toUri(),
+                    "w",
+                ) ?: error("Unable to open the selected CSV destination.")
+                DebugHitCandidateCsvExporter.write(detection, output)
+                mutableUiState.value = mutableUiState.value.copy(
+                    debugCsvExport = DebugCsvExportState.Exported(
+                        "Temporary hit-candidate CSV exported.",
+                    ),
+                )
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                mutableUiState.value = mutableUiState.value.copy(
+                    debugCsvExport = DebugCsvExportState.Failed(
+                        exception.message ?: "Unable to export debug hit-candidate CSV.",
+                    ),
+                )
+            }
+        }
+    }
+
     fun releaseAudioResources() {
         stopPlayback()
         debugAudioJob?.cancel()
@@ -554,6 +617,7 @@ class PracticeViewModel(
             audioAnalysisJob?.cancel()
             mutableUiState.value = mutableUiState.value.copy(
                 audioAnalysis = AudioAnalysisState.NotStarted,
+                hitDetection = HitDetectionState.NotStarted,
             )
         }
         csvExportJob?.cancel()
@@ -594,22 +658,45 @@ class PracticeViewModel(
         csvExportJob?.cancel()
         mutableUiState.value = mutableUiState.value.copy(
             audioAnalysis = AudioAnalysisState.Processing,
+            hitDetection = HitDetectionState.NotStarted,
             debugCsvExport = DebugCsvExportState.NotStarted,
         )
         audioAnalysisJob = viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val analysis = offlineAudioAnalyzer.analyze(recordedSession) {
+            val analysis = try {
+                offlineAudioAnalyzer.analyze(recordedSession) {
                     coroutineContext.ensureActive()
                 }
-                mutableUiState.value = mutableUiState.value.copy(
-                    audioAnalysis = AudioAnalysisState.Ready(analysis),
-                )
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
                 mutableUiState.value = mutableUiState.value.copy(
                     audioAnalysis = AudioAnalysisState.Failed(
                         exception.message ?: "Offline audio preprocessing failed.",
+                    ),
+                    hitDetection = HitDetectionState.NotStarted,
+                )
+                return@launch
+            }
+            mutableUiState.value = mutableUiState.value.copy(
+                audioAnalysis = AudioAnalysisState.Ready(analysis),
+                hitDetection = HitDetectionState.Detecting,
+            )
+            try {
+                val detection = offlineDrumHitDetector.detect(
+                    analysis = analysis,
+                    snapshot = recordedSession.detectionSnapshot,
+                    runtimeExercise = recordedSession.runtimeExercise,
+                    cancellationCheck = { coroutineContext.ensureActive() },
+                )
+                mutableUiState.value = mutableUiState.value.copy(
+                    hitDetection = HitDetectionState.Ready(detection),
+                )
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                mutableUiState.value = mutableUiState.value.copy(
+                    hitDetection = HitDetectionState.Failed(
+                        exception.message ?: "Offline drum-hit detection failed.",
                     ),
                 )
             }

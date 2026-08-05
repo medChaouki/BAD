@@ -3,6 +3,11 @@ package com.titaniumharmonics.bad.audio.analysis
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
 import com.titaniumharmonics.bad.audio.metronome.MetronomeConfiguration
+import com.titaniumharmonics.bad.audio.detection.CandidateClassification
+import com.titaniumharmonics.bad.audio.detection.CandidateRejectionReason
+import com.titaniumharmonics.bad.audio.detection.DetectedCandidate
+import com.titaniumharmonics.bad.audio.detection.HitDetectionConfiguration
+import com.titaniumharmonics.bad.audio.detection.HitDetectionResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -36,12 +41,12 @@ class DebugAudioAnalysisToolsTest {
             assertEquals(3, lines.size)
             assertEquals(
                 "2.5,0.25,0.2,0.3,0.1,0.15,0.01,0.1,0.1,0.15,0.15," +
-                    "6000,6000,10.0,true",
+                    "6000,6000,10.0,true,,false,,,,,,false,,,",
                 lines[1],
             )
             assertEquals(
                 "4.5,-0.5,-0.4,0.6,0.2,0.35,0.02,0.2,0.2,0.35,0.35," +
-                    "6000,6000,10.0,true",
+                    "6000,6000,10.0,true,,false,,,,,,false,,,",
                 lines[2],
             )
             assertFalse(lines.any { "NaN" in it || "Infinity" in it })
@@ -64,6 +69,63 @@ class DebugAudioAnalysisToolsTest {
         }
 
         assertEquals(analysis.frameCount, analysis.envelope.size)
+    }
+
+    @Test
+    fun hitCandidateCsvHasStableHeaderRowsAndFiniteLocaleIndependentValues() {
+        val candidate = DetectedCandidate(
+            index = 0,
+            accepted = false,
+            classification = CandidateClassification.METRONOME,
+            rejectionReason = CandidateRejectionReason.METRONOME_ONLY,
+            rawExerciseSample = 480L,
+            rawTimeMillis = 10.0,
+            calibratedExerciseSample = 432L,
+            calibratedTimeMillis = 9.0,
+            onsetFrame = 5,
+            peakFrame = 7,
+            peakExerciseSample = 672L,
+            peakTimeMillis = 14.0,
+            peakAmplitude = 0.8f,
+            frameLevel = 0.4f,
+            envelope = 0.6f,
+            noiseFloor = 0.02f,
+            signalToNoiseRatio = 30.0,
+            metronomeBandRatio = 0.9,
+            broadbandResidualEnergy = 0.005,
+            spectralBandwidthHz = 180.0,
+            spectralCentroidHz = 6_000.0,
+            confidence = 0.88,
+            calibrationApplied = true,
+        )
+        val result = HitDetectionResult(
+            hits = emptyList(),
+            rejectedMetronomeCandidates = listOf(candidate),
+            otherRejectedCandidates = emptyList(),
+            candidates = listOf(candidate),
+            adaptiveThreshold = ImmutableFloatSeries.copyOf(floatArrayOf(0.02f)),
+            expectedExerciseSamples = ImmutableLongSeries.copyOf(longArrayOf()),
+            configuration = HitDetectionConfiguration.DEFAULT,
+            calibrationOffsetSamples = 48L,
+            calibrationApplied = true,
+        )
+        val previousLocale = Locale.getDefault()
+        Locale.setDefault(Locale.GERMANY)
+        try {
+            val output = ByteArrayOutputStream()
+            DebugHitCandidateCsvExporter.write(result, output)
+            val lines = output.toString(Charsets.UTF_8).trim().lines()
+            assertEquals(DebugHitCandidateCsvExporter.HEADER, lines.first())
+            assertEquals(2, lines.size)
+            assertEquals(
+                "0,false,10.0,9.0,14.0,0.800000011920929,30.0,0.9,0.005," +
+                    "180.0,METRONOME,0.88,true",
+                lines.last(),
+            )
+            assertFalse(lines.any { "NaN" in it || "Infinity" in it || ',' !in it })
+        } finally {
+            Locale.setDefault(previousLocale)
+        }
     }
 
     @Test
@@ -182,5 +244,8 @@ class DebugAudioAnalysisToolsTest {
         metronomeConfiguration = MetronomeConfiguration.DEFAULT,
         expectedMetronomeExerciseSamples = ImmutableLongSeries.copyOf(longArrayOf()),
         maximumMetronomeSuppression = 0.0f,
+        postNotchPcm = ImmutableFloatSeries.copyOf(
+            FloatArray(maxOf(centers.last() + 1L, 1L).toInt()),
+        ),
     )
 }

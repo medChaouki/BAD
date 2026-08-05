@@ -114,6 +114,7 @@ class OfflineAudioAnalyzer(
             maximumMetronomeSuppression = preNotchEnvelope.indices.maxOf { index ->
                 (preNotchEnvelope[index] - postNotchEnvelope[index]).coerceAtLeast(0.0f)
             },
+            postNotchPcm = ImmutableFloatSeries.fromOwned(postNotchSignal),
         )
     }
 

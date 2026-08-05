@@ -2,6 +2,7 @@ package com.titaniumharmonics.bad.audio
 
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
+import com.titaniumharmonics.bad.audio.detection.SessionDetectionSnapshot
 import java.io.File
 
 enum class PracticeRecordingPhase {
@@ -29,6 +30,7 @@ class PracticeRecordingCoordinator(
 
     private var runtimeExercise: RuntimeExercise? = null
     private var metronomeSnapshot: SessionMetronomeSnapshot? = null
+    private var detectionSnapshot: SessionDetectionSnapshot? = null
     private var exerciseStartSampleFrame: Long? = null
     private var phaseBeforePause: PracticeRecordingPhase? = null
 
@@ -36,11 +38,14 @@ class PracticeRecordingCoordinator(
         exercise: RuntimeExercise,
         sessionMetronomeSnapshot: SessionMetronomeSnapshot =
             SessionMetronomeSnapshot.COMPATIBILITY_FALLBACK,
+        sessionDetectionSnapshot: SessionDetectionSnapshot =
+            SessionDetectionSnapshot.COMPATIBILITY_FALLBACK,
     ) {
         playbackController.deleteRecording()
         completedSession = null
         runtimeExercise = exercise
         metronomeSnapshot = sessionMetronomeSnapshot
+        detectionSnapshot = sessionDetectionSnapshot
         exerciseStartSampleFrame = null
         phaseBeforePause = null
         try {
@@ -50,6 +55,7 @@ class PracticeRecordingCoordinator(
             phase = PracticeRecordingPhase.ERROR
             runtimeExercise = null
             metronomeSnapshot = null
+            detectionSnapshot = null
             throw exception
         }
     }
@@ -119,6 +125,9 @@ class PracticeRecordingCoordinator(
         val sessionMetronomeSnapshot = checkNotNull(metronomeSnapshot) {
             "Session metronome configuration is unavailable."
         }
+        val sessionDetectionSnapshot = checkNotNull(detectionSnapshot) {
+            "Session hit-detection configuration is unavailable."
+        }
         return try {
             val recording = recorder.finish()
             check(File(recording.filePath).isFile) {
@@ -131,6 +140,7 @@ class PracticeRecordingCoordinator(
                 exerciseStartSampleFrame = startSampleFrame,
                 runtimeExercise = exercise,
                 metronomeSnapshot = sessionMetronomeSnapshot,
+                detectionSnapshot = sessionDetectionSnapshot,
             )
             completedSession = session
             phase = PracticeRecordingPhase.COMPLETED
@@ -153,6 +163,7 @@ class PracticeRecordingCoordinator(
         completedSession = null
         runtimeExercise = null
         metronomeSnapshot = null
+        detectionSnapshot = null
         exerciseStartSampleFrame = null
         phaseBeforePause = null
         phase = PracticeRecordingPhase.CANCELLED
@@ -181,6 +192,7 @@ class PracticeRecordingCoordinator(
         completedSession = null
         runtimeExercise = null
         metronomeSnapshot = null
+        detectionSnapshot = null
         exerciseStartSampleFrame = null
         phaseBeforePause = null
         phase = PracticeRecordingPhase.ERROR

@@ -11,6 +11,8 @@ import java.io.File
 import java.nio.file.Files
 import com.titaniumharmonics.bad.audio.metronome.MetronomeConfiguration
 import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
+import com.titaniumharmonics.bad.audio.detection.HitDetectionConfiguration
+import com.titaniumharmonics.bad.audio.detection.SessionDetectionSnapshot
 
 class PracticeRecordingCoordinatorTest {
     @Test
@@ -20,7 +22,12 @@ class PracticeRecordingCoordinatorTest {
             configuration = MetronomeConfiguration.DEFAULT.withToneFrequency(5_000),
             downbeatsOnly = true,
         )
-        fixture.coordinator.startSession(fixture.exercise, snapshot)
+        val detectionSnapshot = SessionDetectionSnapshot(
+            configuration = HitDetectionConfiguration.DEFAULT.copy(
+                minimumAbsoluteThreshold = 0.08,
+            ),
+        )
+        fixture.coordinator.startSession(fixture.exercise, snapshot, detectionSnapshot)
         fixture.recorder.appendFrames(192_000L)
         fixture.coordinator.markExerciseStarted()
         fixture.recorder.appendFrames(48_000L)
@@ -31,6 +38,8 @@ class PracticeRecordingCoordinatorTest {
         assertEquals(snapshot, session.metronomeSnapshot)
         assertEquals(5_000, session.metronomeSnapshot.configuration.tone.frequencyHz)
         assertEquals(7_000, independentlyChangedGlobal.tone.frequencyHz)
+        assertEquals(detectionSnapshot, session.detectionSnapshot)
+        assertEquals(0.08, session.detectionSnapshot.configuration.minimumAbsoluteThreshold, 0.0)
     }
 
     @Test
