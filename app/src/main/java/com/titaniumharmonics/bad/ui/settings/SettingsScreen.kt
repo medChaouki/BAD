@@ -30,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.titaniumharmonics.bad.audio.calibration.TimingCalibration
 import com.titaniumharmonics.bad.audio.detection.MetronomeRejectionConfiguration
 import com.titaniumharmonics.bad.audio.detection.UncertainCandidateBehaviour
+import com.titaniumharmonics.bad.audio.matching.JudgementConfiguration
 import com.titaniumharmonics.bad.audio.metronome.MetronomeNotchConfiguration
 import com.titaniumharmonics.bad.audio.metronome.MetronomeToneConfiguration
 import kotlin.math.roundToInt
@@ -41,9 +42,11 @@ fun SettingsRoute(
     onNavigateBack: () -> Unit,
     viewModel: MetronomeSettingsViewModel = viewModel(),
     detectionViewModel: HitDetectionSettingsViewModel = viewModel(),
+    judgementViewModel: JudgementSettingsViewModel = viewModel(),
 ) {
     val metronomeState by viewModel.uiState.collectAsStateWithLifecycle()
     val detectionState by detectionViewModel.uiState.collectAsStateWithLifecycle()
+    val judgementState by judgementViewModel.uiState.collectAsStateWithLifecycle()
     DisposableEffect(Unit) {
         onDispose(viewModel::stopTestTone)
     }
@@ -52,6 +55,8 @@ fun SettingsRoute(
         metronomeState = metronomeState,
         detectionState = detectionState,
         detectionActions = detectionViewModel,
+        judgementState = judgementState,
+        judgementActions = judgementViewModel,
         onOpenTimingCalibration = onOpenTimingCalibration,
         onNavigateBack = onNavigateBack,
         onToneFrequencyChange = viewModel::setToneFrequency,
@@ -75,6 +80,8 @@ internal fun SettingsScreen(
     metronomeState: MetronomeSettingsUiState,
     detectionState: HitDetectionSettingsUiState,
     detectionActions: HitDetectionSettingsActions,
+    judgementState: JudgementSettingsUiState,
+    judgementActions: JudgementSettingsActions,
     onOpenTimingCalibration: () -> Unit,
     onNavigateBack: () -> Unit,
     onToneFrequencyChange: (Int) -> Unit,
@@ -123,6 +130,71 @@ internal fun SettingsScreen(
                 onReset = onResetMetronome,
             )
             HitDetectionSettingsCard(detectionState, detectionActions)
+            JudgementSettingsCard(judgementState, judgementActions)
+        }
+    }
+}
+
+@Composable
+private fun JudgementSettingsCard(
+    state: JudgementSettingsUiState,
+    actions: JudgementSettingsActions,
+) {
+    val configuration = state.configuration
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                "Timing judgement",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                "Negative timing errors are early; positive timing errors are late.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            DecimalStepper(
+                "On-Time Before",
+                configuration.onTimeBeforeMillis,
+                5.0,
+                0.0,
+                configuration.maximumEarlyMillis,
+                actions::setOnTimeBefore,
+                "ms",
+            )
+            DecimalStepper(
+                "On-Time After",
+                configuration.onTimeAfterMillis,
+                5.0,
+                0.0,
+                configuration.maximumLateMillis,
+                actions::setOnTimeAfter,
+                "ms",
+            )
+            DecimalStepper(
+                "Maximum Early",
+                configuration.maximumEarlyMillis,
+                5.0,
+                configuration.onTimeBeforeMillis,
+                JudgementConfiguration.MAXIMUM_WINDOW_MILLIS,
+                actions::setMaximumEarly,
+                "ms",
+            )
+            DecimalStepper(
+                "Maximum Late",
+                configuration.maximumLateMillis,
+                5.0,
+                configuration.onTimeAfterMillis,
+                JudgementConfiguration.MAXIMUM_WINDOW_MILLIS,
+                actions::setMaximumLate,
+                "ms",
+            )
+            state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            OutlinedButton(onClick = actions::reset, modifier = Modifier.fillMaxWidth()) {
+                Text("Reset judgement settings")
+            }
         }
     }
 }

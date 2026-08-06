@@ -11,7 +11,8 @@ each hit was early, on time, late, or missed.
 The project is currently an early version 1 prototype. It can select, load,
 edit, save, and run a single-lane exercise with a generated metronome and a
 scrolling Compose timeline. Practice sessions are captured as WAV audio;
-automatic hit detection is not implemented yet.
+automatic hit detection and its pure-Kotlin note-matching core are now available
+for developer inspection.
 
 ## Current features
 
@@ -391,10 +392,25 @@ Leaving the Practice screen releases both capture and playback resources. The
 recording pipeline remains present in release builds, but this playback card is
 compiled behind `BuildConfig.DEBUG` and is not shown there.
 
+Detected drum hits can now be matched deterministically to the exact expected
+notes in the immutable runtime-exercise snapshot. Matching uses calibrated hit
+samples and a dynamic-programming sequence alignment: a match costs the absolute
+timing error, a missed note costs the maximum-late window, and an extra hit costs
+the maximum-early window. Exact ties prefer the lower accumulated absolute
+timing error, then the earliest chronological operation and stable input order.
+Negative errors are early and positive errors are late. Hits below the configured
+minimum confidence are excluded before matching and retained separately for
+diagnostics.
+
+The default On-Time window is 40 ms before and after a note, with maximum Early
+and Late matching windows of 120 ms. These four boundaries are directly editable
+and resettable in Settings and persist locally. The On-Time boundaries cannot
+exceed their corresponding maximum matching windows.
+
 Current practice recordings retain structural software sample alignment. The
 calibration below measures the remaining fixed phone audio-path offset and is
-now applied to offline detected hits. Hit-to-note matching, timing judgement,
-statistics, and results UI remain intentionally deferred.
+now applied to offline detected hits. Statistics and results UI remain
+intentionally deferred.
 
 ## Timing calibration
 
@@ -443,10 +459,11 @@ This universal value corrects the tested phone-speaker/built-in-microphone
 pipeline only. Bluetooth and other routes can introduce different additional
 latency during practice. A 6000 Hz tone is a starting compromise and audibility
 and acoustic suppression still vary with phone speakers, headphones, Bluetooth
-codecs, microphone response, room acoustics, and playback volume. Drum onset
-detection remains deferred to PR 5.1.
+codecs, microphone response, room acoustics, and playback volume. Offline onset
+detection and note matching cannot yet compensate for changing acoustic paths or
+classify drum types.
 
-When microphone detection and hit matching are added, timing feedback will use
+When production judgement feedback is added, timing feedback will use
 a green ring for on-time hits, a blue ring for early hits, and a red ring for
 late hits. Missed notes will show a gray `X` at the expected-note position, and
 extra hits will show a red `X` at the detected-hit position. Extra hits remain

@@ -18,6 +18,7 @@ class SettingsScreenInstrumentedTest {
     fun metronomeControlsAreDirectlyPresentAndResetIsActionable() {
         var resetClicked = false
         TestDetectionActions.resetClicked = false
+        TestJudgementActions.resetClicked = false
         composeRule.setContent {
             BADTheme {
                 SettingsScreen(
@@ -25,6 +26,8 @@ class SettingsScreenInstrumentedTest {
                     metronomeState = MetronomeSettingsUiState(),
                     detectionState = HitDetectionSettingsUiState(),
                     detectionActions = TestDetectionActions,
+                    judgementState = JudgementSettingsUiState(),
+                    judgementActions = TestJudgementActions,
                     onOpenTimingCalibration = {},
                     onNavigateBack = {},
                     onToneFrequencyChange = {},
@@ -75,6 +78,11 @@ class SettingsScreenInstrumentedTest {
             "Spectral confidence threshold",
             "Maximum scheduled distance",
             "Retain uncertain candidates as drum",
+            "Timing judgement",
+            "On-Time Before",
+            "On-Time After",
+            "Maximum Early",
+            "Maximum Late",
         ).forEach { label ->
             composeRule.onNodeWithText(label).assertExists()
         }
@@ -86,6 +94,21 @@ class SettingsScreenInstrumentedTest {
             .performScrollTo()
             .performClick()
         assertTrue(TestDetectionActions.resetClicked)
+        composeRule.onNodeWithText("Reset judgement settings")
+            .performScrollTo()
+            .performClick()
+        assertTrue(TestJudgementActions.resetClicked)
+    }
+}
+
+private object TestJudgementActions : JudgementSettingsActions {
+    var resetClicked = false
+    override fun setOnTimeBefore(value: Double) = Unit
+    override fun setOnTimeAfter(value: Double) = Unit
+    override fun setMaximumEarly(value: Double) = Unit
+    override fun setMaximumLate(value: Double) = Unit
+    override fun reset() {
+        resetClicked = true
     }
 }
 

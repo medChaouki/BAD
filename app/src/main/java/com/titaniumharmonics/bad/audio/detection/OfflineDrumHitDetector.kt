@@ -3,11 +3,11 @@ package com.titaniumharmonics.bad.audio.detection
 import com.titaniumharmonics.bad.audio.analysis.AudioAnalysis
 import com.titaniumharmonics.bad.audio.analysis.ImmutableFloatSeries
 import com.titaniumharmonics.bad.audio.analysis.ImmutableLongSeries
+import com.titaniumharmonics.bad.audio.matching.RuntimeExerciseSampleTimeline
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
-import kotlin.math.roundToLong
 
 class OfflineDrumHitDetector {
     fun detect(
@@ -314,14 +314,10 @@ class OfflineDrumHitDetector {
     private fun expectedExerciseSamples(
         analysis: AudioAnalysis,
         runtimeExercise: RuntimeExercise,
-    ): LongArray {
-        return runtimeExercise.notes.map { note ->
-            (
-                note.positionTicks * 60.0 * analysis.sampleRateHz /
-                    (runtimeExercise.tempoBpm * runtimeExercise.ticksPerQuarterNote)
-                ).roundToLong()
-        }.toLongArray()
-    }
+    ): LongArray = RuntimeExerciseSampleTimeline.expectedSamples(
+        runtimeExercise,
+        analysis.sampleRateHz,
+    )
 
     private data class WorkingCandidate(
         val index: Int,
