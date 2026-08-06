@@ -18,6 +18,8 @@ interface JudgementSettingsActions {
     fun setOnTimeAfter(value: Double)
     fun setMaximumEarly(value: Double)
     fun setMaximumLate(value: Double)
+    fun setMinimumConfidence(value: Double)
+    fun setExtraHitHandlingEnabled(value: Boolean)
     fun reset()
 }
 
@@ -48,7 +50,7 @@ class JudgementSettingsViewModel(application: Application) :
     }
 
     override fun setMaximumEarly(value: Double) = update { current ->
-        val bounded = value.validWindow()
+        val bounded = value.validMaximumWindow()
         current.copy(
             maximumEarlyMillis = bounded,
             onTimeBeforeMillis = minOf(current.onTimeBeforeMillis, bounded),
@@ -56,11 +58,19 @@ class JudgementSettingsViewModel(application: Application) :
     }
 
     override fun setMaximumLate(value: Double) = update { current ->
-        val bounded = value.validWindow()
+        val bounded = value.validMaximumWindow()
         current.copy(
             maximumLateMillis = bounded,
             onTimeAfterMillis = minOf(current.onTimeAfterMillis, bounded),
         )
+    }
+
+    override fun setMinimumConfidence(value: Double) = update { current ->
+        current.copy(minimumDetectedHitConfidence = value.validConfidence())
+    }
+
+    override fun setExtraHitHandlingEnabled(value: Boolean) = update { current ->
+        current.copy(extraHitHandlingEnabled = value)
     }
 
     override fun reset() {
@@ -87,4 +97,13 @@ class JudgementSettingsViewModel(application: Application) :
     private fun Double.validWindow(): Double =
         takeIf(Double::isFinite)?.coerceIn(0.0, JudgementConfiguration.MAXIMUM_WINDOW_MILLIS)
             ?: 0.0
+
+    private fun Double.validMaximumWindow(): Double =
+        takeIf(Double::isFinite)?.coerceIn(
+            JudgementConfiguration.MINIMUM_MAXIMUM_WINDOW_MILLIS,
+            JudgementConfiguration.MAXIMUM_WINDOW_MILLIS,
+        ) ?: JudgementConfiguration.MINIMUM_MAXIMUM_WINDOW_MILLIS
+
+    private fun Double.validConfidence(): Double =
+        takeIf(Double::isFinite)?.coerceIn(0.0, 1.0) ?: 0.0
 }

@@ -177,7 +177,10 @@ private fun JudgementSettingsCard(
                 "Maximum Early",
                 configuration.maximumEarlyMillis,
                 5.0,
-                configuration.onTimeBeforeMillis,
+                maxOf(
+                    configuration.onTimeBeforeMillis,
+                    JudgementConfiguration.MINIMUM_MAXIMUM_WINDOW_MILLIS,
+                ),
                 JudgementConfiguration.MAXIMUM_WINDOW_MILLIS,
                 actions::setMaximumEarly,
                 "ms",
@@ -186,10 +189,26 @@ private fun JudgementSettingsCard(
                 "Maximum Late",
                 configuration.maximumLateMillis,
                 5.0,
-                configuration.onTimeAfterMillis,
+                maxOf(
+                    configuration.onTimeAfterMillis,
+                    JudgementConfiguration.MINIMUM_MAXIMUM_WINDOW_MILLIS,
+                ),
                 JudgementConfiguration.MAXIMUM_WINDOW_MILLIS,
                 actions::setMaximumLate,
                 "ms",
+            )
+            DecimalStepper(
+                "Minimum detected-hit confidence",
+                configuration.minimumDetectedHitConfidence,
+                0.05,
+                0.0,
+                1.0,
+                actions::setMinimumConfidence,
+            )
+            LabelledSwitch(
+                "Extra-hit handling enabled",
+                configuration.extraHitHandlingEnabled,
+                actions::setExtraHitHandlingEnabled,
             )
             state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             OutlinedButton(onClick = actions::reset, modifier = Modifier.fillMaxWidth()) {

@@ -3,6 +3,7 @@ package com.titaniumharmonics.bad.audio
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
 import com.titaniumharmonics.bad.audio.detection.SessionDetectionSnapshot
+import com.titaniumharmonics.bad.audio.matching.SessionJudgementSnapshot
 
 private const val NANOS_PER_MILLISECOND = 1_000_000L
 
@@ -62,6 +63,8 @@ data class RecordedSession(
         SessionMetronomeSnapshot.COMPATIBILITY_FALLBACK,
     val detectionSnapshot: SessionDetectionSnapshot =
         SessionDetectionSnapshot.COMPATIBILITY_FALLBACK,
+    val judgementSnapshot: SessionJudgementSnapshot =
+        SessionJudgementSnapshot.COMPATIBILITY_FALLBACK,
 ) {
     init {
         require(wavFilePath.isNotBlank()) { "wavFilePath must not be blank." }

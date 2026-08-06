@@ -404,13 +404,41 @@ diagnostics.
 
 The default On-Time window is 40 ms before and after a note, with maximum Early
 and Late matching windows of 120 ms. These four boundaries are directly editable
-and resettable in Settings and persist locally. The On-Time boundaries cannot
-exceed their corresponding maximum matching windows.
+and resettable in Settings alongside minimum hit confidence and extra-hit
+handling. The values persist locally with safe fallback for corrupt data. The
+On-Time boundaries cannot exceed their corresponding positive maximum matching
+windows.
+
+The result domain can assemble matching and detection output into an immutable
+`PracticeResult`. Each `JudgedNote` preserves expected timing, measure and beat
+position, matched raw and calibrated hit timing, judgement, confidence, and
+relative intensity; unmatched accepted detections become independent
+`ExtraHit` entries. The exact runtime exercise, metronome, detection, judgement,
+and calibration context are retained so a later persisted format can explain a
+run without consulting newer global settings.
+
+Accuracy is the On-Time note count divided by expected notes, while hit rate is
+all matched notes divided by expected notes. Missed rate uses expected notes as
+its denominator; extra-hit rate uses all accepted detections. A zero denominator
+returns `0.0`. Mean absolute, signed mean, median absolute, and population
+standard deviation use matched-note timing errors only and remain absent when
+there are no matches.
+
+Relative intensity is derived from detected peak amplitude across matched and
+extra accepted hits together. The weakest maps to `0.0` and strongest to `1.0`;
+a single hit or equal-amplitude set maps to `1.0`. This is run-relative strength,
+not decibels, MIDI velocity, or absolute force. Rejected low-confidence hits and
+missed notes have no intensity.
+
+`SessionJudgementSnapshot` freezes the immutable configuration supplied at
+session start, and completed recordings retain it. Later settings edits cannot
+mutate that snapshot or an assembled result. PR 6.3 will load the latest saved
+configuration in the production practice pipeline and wire result assembly into
+session completion and the UI.
 
 Current practice recordings retain structural software sample alignment. The
 calibration below measures the remaining fixed phone audio-path offset and is
-now applied to offline detected hits. Statistics and results UI remain
-intentionally deferred.
+now applied to offline detected hits. Result UI remains intentionally deferred.
 
 ## Timing calibration
 
@@ -498,12 +526,10 @@ Run Android lint:
 
 ## Planned version 1 work
 
-1. Energy/envelope-based onset detection
-2. Detected-hit to expected-note matching
-3. Early, on-time, late, missed, and extra-hit judgements
-4. Hit-intensity measurement
-5. Immediate visual feedback
-6. Practice-session results
+1. Wire current-run result assembly into practice completion
+2. Add immediate visual feedback
+3. Add the practice-session results screen
+4. Persist completed runs and history
 
 Version 1 intentionally uses one generic rhythmic lane. Separate kick, snare,
 hi-hat, and tom lanes are future extensions.

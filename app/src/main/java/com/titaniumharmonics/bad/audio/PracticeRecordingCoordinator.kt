@@ -3,6 +3,7 @@ package com.titaniumharmonics.bad.audio
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
 import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
 import com.titaniumharmonics.bad.audio.detection.SessionDetectionSnapshot
+import com.titaniumharmonics.bad.audio.matching.SessionJudgementSnapshot
 import java.io.File
 
 enum class PracticeRecordingPhase {
@@ -31,6 +32,7 @@ class PracticeRecordingCoordinator(
     private var runtimeExercise: RuntimeExercise? = null
     private var metronomeSnapshot: SessionMetronomeSnapshot? = null
     private var detectionSnapshot: SessionDetectionSnapshot? = null
+    private var judgementSnapshot: SessionJudgementSnapshot? = null
     private var exerciseStartSampleFrame: Long? = null
     private var phaseBeforePause: PracticeRecordingPhase? = null
 
@@ -40,12 +42,15 @@ class PracticeRecordingCoordinator(
             SessionMetronomeSnapshot.COMPATIBILITY_FALLBACK,
         sessionDetectionSnapshot: SessionDetectionSnapshot =
             SessionDetectionSnapshot.COMPATIBILITY_FALLBACK,
+        sessionJudgementSnapshot: SessionJudgementSnapshot =
+            SessionJudgementSnapshot.COMPATIBILITY_FALLBACK,
     ) {
         playbackController.deleteRecording()
         completedSession = null
         runtimeExercise = exercise
         metronomeSnapshot = sessionMetronomeSnapshot
         detectionSnapshot = sessionDetectionSnapshot
+        judgementSnapshot = sessionJudgementSnapshot
         exerciseStartSampleFrame = null
         phaseBeforePause = null
         try {
@@ -56,6 +61,7 @@ class PracticeRecordingCoordinator(
             runtimeExercise = null
             metronomeSnapshot = null
             detectionSnapshot = null
+            judgementSnapshot = null
             throw exception
         }
     }
@@ -128,6 +134,9 @@ class PracticeRecordingCoordinator(
         val sessionDetectionSnapshot = checkNotNull(detectionSnapshot) {
             "Session hit-detection configuration is unavailable."
         }
+        val sessionJudgementSnapshot = checkNotNull(judgementSnapshot) {
+            "Session judgement configuration is unavailable."
+        }
         return try {
             val recording = recorder.finish()
             check(File(recording.filePath).isFile) {
@@ -141,6 +150,7 @@ class PracticeRecordingCoordinator(
                 runtimeExercise = exercise,
                 metronomeSnapshot = sessionMetronomeSnapshot,
                 detectionSnapshot = sessionDetectionSnapshot,
+                judgementSnapshot = sessionJudgementSnapshot,
             )
             completedSession = session
             phase = PracticeRecordingPhase.COMPLETED
@@ -164,6 +174,7 @@ class PracticeRecordingCoordinator(
         runtimeExercise = null
         metronomeSnapshot = null
         detectionSnapshot = null
+        judgementSnapshot = null
         exerciseStartSampleFrame = null
         phaseBeforePause = null
         phase = PracticeRecordingPhase.CANCELLED
@@ -193,6 +204,7 @@ class PracticeRecordingCoordinator(
         runtimeExercise = null
         metronomeSnapshot = null
         detectionSnapshot = null
+        judgementSnapshot = null
         exerciseStartSampleFrame = null
         phaseBeforePause = null
         phase = PracticeRecordingPhase.ERROR

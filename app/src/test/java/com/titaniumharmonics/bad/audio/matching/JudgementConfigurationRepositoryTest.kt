@@ -1,6 +1,7 @@
 package com.titaniumharmonics.bad.audio.matching
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class JudgementConfigurationRepositoryTest {
@@ -41,6 +42,36 @@ class JudgementConfigurationRepositoryTest {
 
         store.values = mapOf("version" to 99)
         assertEquals(JudgementConfiguration.DEFAULT, repository.load())
+    }
+
+    @Test
+    fun validationRejectsZeroMaximumWindowsAndInvalidConfidence() {
+        assertThrows(IllegalArgumentException::class.java) {
+            JudgementConfiguration(
+                onTimeBeforeMillis = 0.0,
+                maximumEarlyMillis = 0.0,
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            JudgementConfiguration(minimumDetectedHitConfidence = 1.1)
+        }
+    }
+
+    @Test
+    fun snapshotsRemainFrozenWhileNewLoadsReceiveUpdatedSettings() {
+        val store = FakeStore()
+        val repository = JudgementConfigurationRepository(store)
+        val first = JudgementConfiguration.DEFAULT.copy(onTimeBeforeMillis = 25.0)
+        repository.save(first)
+        val activeSession = SessionJudgementSnapshot(repository.load())
+
+        val updated = first.copy(onTimeBeforeMillis = 35.0)
+        repository.save(updated)
+        val newSession = SessionJudgementSnapshot(repository.load())
+
+        assertEquals(25.0, activeSession.configuration.onTimeBeforeMillis, 0.0)
+        assertEquals(35.0, newSession.configuration.onTimeBeforeMillis, 0.0)
+        assertEquals(JudgementConfiguration.CURRENT_VERSION, activeSession.version)
     }
 
     private class FakeStore : JudgementConfigurationStore {

@@ -83,6 +83,8 @@ class SettingsScreenInstrumentedTest {
             "On-Time After",
             "Maximum Early",
             "Maximum Late",
+            "Minimum detected-hit confidence",
+            "Extra-hit handling enabled",
         ).forEach { label ->
             composeRule.onNodeWithText(label).assertExists()
         }
@@ -107,6 +109,8 @@ private object TestJudgementActions : JudgementSettingsActions {
     override fun setOnTimeAfter(value: Double) = Unit
     override fun setMaximumEarly(value: Double) = Unit
     override fun setMaximumLate(value: Double) = Unit
+    override fun setMinimumConfidence(value: Double) = Unit
+    override fun setExtraHitHandlingEnabled(value: Boolean) = Unit
     override fun reset() {
         resetClicked = true
     }
