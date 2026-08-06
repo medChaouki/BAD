@@ -69,6 +69,8 @@ import androidx.compose.ui.platform.LocalContext
 import com.titaniumharmonics.bad.BuildConfig
 import com.titaniumharmonics.bad.R
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
+import com.titaniumharmonics.bad.audio.result.PracticeResult
+import com.titaniumharmonics.bad.audio.result.PracticeResultState
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
 import com.titaniumharmonics.bad.audio.RecordedSession
 import com.titaniumharmonics.bad.audio.SampleFrameTiming
@@ -97,6 +99,7 @@ fun PracticeRoute(
     onDocumentLoadConsumed: () -> Unit,
     fileOperationsEnabled: Boolean,
     onOpenSettings: () -> Unit,
+    onResultsReady: (PracticeResult) -> Unit,
     viewModel: PracticeViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -166,6 +169,11 @@ fun PracticeRoute(
             startWhenExerciseIsReady = false
             requestSessionStart()
         }
+    }
+
+    LaunchedEffect(uiState.practiceResult) {
+        val ready = uiState.practiceResult as? PracticeResultState.Ready
+        if (ready != null) onResultsReady(ready.result)
     }
 
     DisposableEffect(lifecycleOwner, viewModel) {
@@ -475,6 +483,14 @@ private fun FullScreenPracticePlayer(
                     color = playerTextColor,
                 )
             }
+            (uiState.practiceResult as? PracticeResultState.Failed)?.let { failed ->
+                Text(
+                    text = failed.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+            }
         }
         if (BuildConfig.DEBUG && uiState.phase == PracticePhase.COMPLETED) {
             DebugRecordedAudioCard(
@@ -482,6 +498,7 @@ private fun FullScreenPracticePlayer(
                 recordedSession = uiState.recordedSession,
                 analysisState = uiState.audioAnalysis,
                 detectionState = uiState.hitDetection,
+                resultState = uiState.practiceResult,
                 csvExportState = uiState.debugCsvExport,
                 onPlay = onPlayDebugRecording,
                 onPause = onPauseDebugRecording,
@@ -555,6 +572,7 @@ private fun DebugRecordedAudioCard(
     recordedSession: RecordedSession?,
     analysisState: AudioAnalysisState,
     detectionState: HitDetectionState,
+    resultState: PracticeResultState,
     csvExportState: DebugCsvExportState,
     onPlay: () -> Unit,
     onPause: () -> Unit,
@@ -611,6 +629,15 @@ private fun DebugRecordedAudioCard(
                 detectionState = detectionState,
                 playbackState = state,
             )
+            when (resultState) {
+                PracticeResultState.NotStarted -> Unit
+                PracticeResultState.Matching -> Text("Result: Matching…")
+                is PracticeResultState.Ready -> Text("Result: Ready")
+                is PracticeResultState.Failed -> Text(
+                    resultState.message,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

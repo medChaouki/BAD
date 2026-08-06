@@ -1,6 +1,7 @@
 package com.titaniumharmonics.bad.ui
 
 import com.titaniumharmonics.bad.audio.calibration.TimingCalibration
+import com.titaniumharmonics.bad.audio.result.PracticeResult
 
 enum class AppDestination {
     PRACTICE,
@@ -8,6 +9,7 @@ enum class AppDestination {
     EXERCISE_EDITOR,
     SETTINGS,
     TIMING_CALIBRATION,
+    RESULTS,
 }
 
 enum class ExerciseLibraryPurpose {
@@ -25,6 +27,8 @@ data class AppUiState(
     val defaultExerciseFolderUri: String? = null,
     val storageInitializationComplete: Boolean = false,
     val activeTimingCalibration: TimingCalibration? = null,
+    val practiceResult: PracticeResult? = null,
+    val resultsDetailVisible: Boolean = false,
 )
 
 internal fun initialAppUiState(calibration: TimingCalibration?): AppUiState = AppUiState(
@@ -42,6 +46,8 @@ internal fun AppUiState.openExerciseLibrary(
     destination = AppDestination.EXERCISE_LIBRARY,
     exerciseLibraryPurpose = purpose,
     editorDocumentUri = null,
+    practiceResult = null,
+    resultsDetailVisible = false,
 )
 
 internal fun AppUiState.openLibraryExercise(documentUri: String): AppUiState =
@@ -63,8 +69,36 @@ internal fun AppUiState.playEditorExercise(documentUri: String): AppUiState = co
     practiceDocumentUriToLoad = documentUri,
     startPracticeAfterLoad = true,
     editorDocumentUri = null,
+    practiceResult = null,
+    resultsDetailVisible = false,
 )
 
 internal fun AppUiState.openSettings(): AppUiState = copy(
     destination = AppDestination.SETTINGS,
 )
+
+internal fun AppUiState.openResults(result: PracticeResult): AppUiState = copy(
+    destination = AppDestination.RESULTS,
+    practiceResult = result,
+    resultsDetailVisible = false,
+)
+
+internal fun AppUiState.navigateBack(): AppUiState = when (destination) {
+    AppDestination.PRACTICE -> this
+    AppDestination.EXERCISE_LIBRARY -> copy(destination = AppDestination.PRACTICE)
+    AppDestination.EXERCISE_EDITOR -> copy(
+        destination = editorReturnDestination,
+        editorDocumentUri = null,
+    )
+    AppDestination.SETTINGS,
+    AppDestination.TIMING_CALIBRATION,
+    -> copy(destination = AppDestination.PRACTICE)
+    AppDestination.RESULTS -> if (resultsDetailVisible) {
+        copy(resultsDetailVisible = false)
+    } else {
+        copy(
+            destination = AppDestination.PRACTICE,
+            practiceResult = null,
+        )
+    }
+}

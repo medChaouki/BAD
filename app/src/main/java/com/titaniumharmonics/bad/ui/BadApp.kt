@@ -2,22 +2,29 @@ package com.titaniumharmonics.bad.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.titaniumharmonics.bad.ui.editor.ExerciseEditorRoute
 import com.titaniumharmonics.bad.ui.library.ExerciseLibraryRoute
 import com.titaniumharmonics.bad.ui.practice.PracticeRoute
+import com.titaniumharmonics.bad.ui.practice.PracticeViewModel
+import com.titaniumharmonics.bad.ui.results.ResultsScreen
 import com.titaniumharmonics.bad.ui.calibration.TimingCalibrationRoute
 import com.titaniumharmonics.bad.ui.settings.SettingsRoute
 
 @Composable
 fun BadApp(
     viewModel: AppViewModel = viewModel(),
+    practiceViewModel: PracticeViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     BackHandler(enabled = uiState.destination != AppDestination.PRACTICE) {
+        if (uiState.destination == AppDestination.RESULTS && !uiState.resultsDetailVisible) {
+            practiceViewModel.prepareForNextRun()
+        }
         viewModel.navigateBack()
     }
 
@@ -32,6 +39,8 @@ fun BadApp(
                 onDocumentLoadConsumed = viewModel::consumePracticeDocumentToLoad,
                 fileOperationsEnabled = uiState.storageInitializationComplete,
                 onOpenSettings = viewModel::openSettings,
+                onResultsReady = viewModel::openResults,
+                viewModel = practiceViewModel,
             )
         }
         AppDestination.EXERCISE_LIBRARY -> {
@@ -62,6 +71,34 @@ fun BadApp(
                 onNavigateBack = viewModel::navigateBack,
                 onCalibrationChanged = viewModel::timingCalibrationChanged,
             )
+        }
+        AppDestination.RESULTS -> {
+            val result = uiState.practiceResult
+            if (result == null) {
+                LaunchedEffect(Unit) { viewModel.leaveResultsForPractice() }
+            } else {
+                ResultsScreen(
+                    result = result,
+                    showDetails = uiState.resultsDetailVisible,
+                    onOpenDetails = viewModel::showResultDetails,
+                    onBack = {
+                        if (!uiState.resultsDetailVisible) practiceViewModel.prepareForNextRun()
+                        viewModel.navigateBack()
+                    },
+                    onRetry = {
+                        viewModel.leaveResultsForPractice()
+                        practiceViewModel.retryExercise()
+                    },
+                    onReturnToPractice = {
+                        practiceViewModel.prepareForNextRun()
+                        viewModel.leaveResultsForPractice()
+                    },
+                    onReturnToLibrary = {
+                        practiceViewModel.unloadExercise()
+                        viewModel.openExerciseLibraryForPractice()
+                    },
+                )
+            }
         }
     }
 }

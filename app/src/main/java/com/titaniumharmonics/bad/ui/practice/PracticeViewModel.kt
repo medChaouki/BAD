@@ -27,6 +27,11 @@ import com.titaniumharmonics.bad.audio.detection.SessionDetectionSnapshot
 import com.titaniumharmonics.bad.audio.detection.SharedPreferencesHitDetectionConfigurationStore
 import com.titaniumharmonics.bad.audio.detection.HitDetectionState
 import com.titaniumharmonics.bad.audio.detection.OfflineDrumHitDetector
+import com.titaniumharmonics.bad.audio.matching.JudgementConfigurationRepository
+import com.titaniumharmonics.bad.audio.matching.SessionJudgementSnapshot
+import com.titaniumharmonics.bad.audio.result.PracticeResultProcessingResult
+import com.titaniumharmonics.bad.audio.result.PracticeResultProcessor
+import com.titaniumharmonics.bad.audio.result.PracticeResultState
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseCompilationResult
 import com.titaniumharmonics.bad.exercise.ExerciseCompiler
@@ -39,6 +44,7 @@ import com.titaniumharmonics.bad.timing.MonotonicClock
 import com.titaniumharmonics.bad.timing.PlaybackPhase
 import com.titaniumharmonics.bad.timing.SessionElapsedClock
 import com.titaniumharmonics.bad.timing.SessionProgressCalculator
+import com.titaniumharmonics.bad.ui.settings.SharedPreferencesJudgementConfigurationStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -72,6 +78,9 @@ class PracticeViewModel(
     private val timingCalibrationRepository = TimingCalibrationRepository(
         SharedPreferencesTimingCalibrationStore(application),
     )
+    private val judgementConfigurationRepository = JudgementConfigurationRepository(
+        SharedPreferencesJudgementConfigurationStore(application),
+    )
 
     private val mutableUiState = MutableStateFlow(PracticeUiState())
     val uiState: StateFlow<PracticeUiState> = mutableUiState.asStateFlow()
@@ -95,6 +104,11 @@ class PracticeViewModel(
                 } else {
                     state.hitDetection
                 },
+                practiceResult = if (completedSession == null) {
+                    PracticeResultState.NotStarted
+                } else {
+                    state.practiceResult
+                },
                 debugRecording = debugState,
             )
         },
@@ -105,6 +119,7 @@ class PracticeViewModel(
     )
     private val offlineAudioAnalyzer = OfflineAudioAnalyzer()
     private val offlineDrumHitDetector = OfflineDrumHitDetector()
+    private val practiceResultProcessor = PracticeResultProcessor()
 
     private var loadJob: Job? = null
     private var playbackJob: Job? = null
@@ -113,6 +128,7 @@ class PracticeViewModel(
     private var debugAudioJob: Job? = null
     private var debugPositionJob: Job? = null
     private var audioAnalysisJob: Job? = null
+    private var practiceResultJob: Job? = null
     private var csvExportJob: Job? = null
     private var phaseBeforePause: PracticePhase = PracticePhase.RUNNING
     private var activeMetronomeSnapshot: SessionMetronomeSnapshot? = null
@@ -210,6 +226,9 @@ class PracticeViewModel(
             configuration = hitDetectionConfigurationRepository.load(),
             timingCalibration = timingCalibrationRepository.activeCalibration(),
         )
+        val judgementSnapshot = SessionJudgementSnapshot(
+            configuration = judgementConfigurationRepository.load(),
+        )
         activeMetronomeSnapshot = metronomeSnapshot
 
         val timing = ExerciseTiming(exercise)
@@ -222,6 +241,7 @@ class PracticeViewModel(
             recordedSession = null,
             audioAnalysis = AudioAnalysisState.NotStarted,
             hitDetection = HitDetectionState.NotStarted,
+            practiceResult = PracticeResultState.NotStarted,
             debugCsvExport = DebugCsvExportState.NotStarted,
             errorMessage = null,
         )
@@ -238,6 +258,7 @@ class PracticeViewModel(
                         exercise,
                         metronomeSnapshot,
                         detectionSnapshot,
+                        judgementSnapshot,
                     )
                     metronomePlayer.start(
                         exercise = exercise,
@@ -541,6 +562,7 @@ class PracticeViewModel(
             recordedSession = null,
             audioAnalysis = AudioAnalysisState.NotStarted,
             hitDetection = HitDetectionState.NotStarted,
+            practiceResult = PracticeResultState.NotStarted,
             debugCsvExport = DebugCsvExportState.NotStarted,
         )
     }
@@ -618,8 +640,16 @@ class PracticeViewModel(
             mutableUiState.value = mutableUiState.value.copy(
                 audioAnalysis = AudioAnalysisState.NotStarted,
                 hitDetection = HitDetectionState.NotStarted,
+                practiceResult = PracticeResultState.NotStarted,
             )
         }
+        if (practiceResultJob?.isActive == true) {
+            practiceResultJob?.cancel()
+            mutableUiState.value = mutableUiState.value.copy(
+                practiceResult = PracticeResultState.NotStarted,
+            )
+        }
+        practiceResultJob = null
         csvExportJob?.cancel()
         viewModelScope.launch(Dispatchers.IO) {
             practiceRecordingCoordinator.cancelSession()
@@ -691,6 +721,7 @@ class PracticeViewModel(
                 mutableUiState.value = mutableUiState.value.copy(
                     hitDetection = HitDetectionState.Ready(detection),
                 )
+                startPracticeResultProcessing(recordedSession, analysis, detection)
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
@@ -708,6 +739,66 @@ class PracticeViewModel(
         audioAnalysisJob = null
         csvExportJob?.cancel()
         csvExportJob = null
+        practiceResultJob?.cancel()
+        practiceResultJob = null
+    }
+
+    private fun startPracticeResultProcessing(
+        recordedSession: com.titaniumharmonics.bad.audio.RecordedSession,
+        analysis: com.titaniumharmonics.bad.audio.analysis.AudioAnalysis,
+        detection: com.titaniumharmonics.bad.audio.detection.HitDetectionResult,
+    ) {
+        practiceResultJob?.cancel()
+        mutableUiState.value = mutableUiState.value.copy(
+            practiceResult = PracticeResultState.Matching,
+        )
+        practiceResultJob = viewModelScope.launch(Dispatchers.Default) {
+            val processed = practiceResultProcessor.process(
+                session = recordedSession,
+                analysis = analysis,
+                detection = detection,
+                cancellationCheck = { coroutineContext.ensureActive() },
+            )
+            coroutineContext.ensureActive()
+            if (mutableUiState.value.recordedSession !== recordedSession) return@launch
+            mutableUiState.value = mutableUiState.value.copy(
+                practiceResult = when (processed) {
+                    is PracticeResultProcessingResult.Success ->
+                        PracticeResultState.Ready(processed.result)
+                    is PracticeResultProcessingResult.Failure ->
+                        PracticeResultState.Failed(processed.reason.userMessage)
+                },
+            )
+        }
+    }
+
+    /** Clears all completed-run artifacts while retaining the selected exercise. */
+    fun prepareForNextRun() {
+        stopPlayback()
+        debugAudioJob?.cancel()
+        debugPositionJob?.cancel()
+        clearAudioAnalysis()
+        practiceRecordingCoordinator.deleteCompletedSession()
+        val state = mutableUiState.value
+        val exercise = state.playbackExercise
+        val timing = exercise?.let(::ExerciseTiming)
+        mutableUiState.value = state.copy(
+            phase = if (exercise == null) PracticePhase.UNLOADED else PracticePhase.READY,
+            exerciseElapsedNanos = timing?.countInDurationNanos?.unaryMinus() ?: 0L,
+            countInBeatsRemaining = 0,
+            recordedSession = null,
+            audioAnalysis = AudioAnalysisState.NotStarted,
+            hitDetection = HitDetectionState.NotStarted,
+            practiceResult = PracticeResultState.NotStarted,
+            debugCsvExport = DebugCsvExportState.NotStarted,
+            debugRecording = debugRecordingController.state,
+            errorMessage = null,
+        )
+    }
+
+    fun retryExercise() {
+        prepareForNextRun()
+        startPlayback()
     }
 
     override fun onCleared() {
@@ -718,6 +809,7 @@ class PracticeViewModel(
         debugAudioJob?.cancel()
         debugPositionJob?.cancel()
         audioAnalysisJob?.cancel()
+        practiceResultJob?.cancel()
         csvExportJob?.cancel()
         practiceRecordingCoordinator.release()
         metronomePlayer.stop()

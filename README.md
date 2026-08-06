@@ -430,15 +430,21 @@ a single hit or equal-amplitude set maps to `1.0`. This is run-relative strength
 not decibels, MIDI velocity, or absolute force. Rejected low-confidence hits and
 missed notes have no intensity.
 
-`SessionJudgementSnapshot` freezes the immutable configuration supplied at
+`SessionJudgementSnapshot` freezes the latest saved immutable configuration at
 session start, and completed recordings retain it. Later settings edits cannot
-mutate that snapshot or an assembled result. PR 6.3 will load the latest saved
-configuration in the production practice pipeline and wire result assembly into
-session completion and the UI.
+mutate that snapshot or an assembled result.
+
+After offline hit detection completes, the app validates the completed session
+snapshots, matches detected hits, assembles the current-run result, and opens a
+user-facing Results screen. It reports Early, On Time, Late, Missed, and Extra
+outcomes, accuracy, hit rate, timing statistics, and relative intensity.
+Detailed results list expected and calibrated detected timing without exposing
+raw DSP diagnostics. Retry keeps the same exercise but starts a completely new
+recording with fresh configuration snapshots.
 
 Current practice recordings retain structural software sample alignment. The
 calibration below measures the remaining fixed phone audio-path offset and is
-now applied to offline detected hits. Result UI remains intentionally deferred.
+now applied to offline detected hits.
 
 ## Timing calibration
 
@@ -538,10 +544,8 @@ Run Android lint:
 
 ## Planned version 1 work
 
-1. Wire current-run result assembly into practice completion
-2. Add immediate visual feedback
-3. Add the practice-session results screen
-4. Persist completed runs and history
+1. Add the production signal and judgement graph (PR 6.4)
+2. Persist completed runs, history, and progress tracking (PR 7)
 
 Version 1 intentionally uses one generic rhythmic lane. Separate kick, snare,
 hi-hat, and tom lanes are future extensions.

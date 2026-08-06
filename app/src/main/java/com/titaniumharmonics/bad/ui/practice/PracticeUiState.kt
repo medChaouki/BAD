@@ -5,6 +5,7 @@ import com.titaniumharmonics.bad.audio.RecordedSession
 import com.titaniumharmonics.bad.audio.analysis.AudioAnalysisState
 import com.titaniumharmonics.bad.audio.analysis.DebugCsvExportState
 import com.titaniumharmonics.bad.audio.detection.HitDetectionState
+import com.titaniumharmonics.bad.audio.result.PracticeResultState
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
 
@@ -30,6 +31,7 @@ data class PracticeUiState(
     val recordedSession: RecordedSession? = null,
     val audioAnalysis: AudioAnalysisState = AudioAnalysisState.NotStarted,
     val hitDetection: HitDetectionState = HitDetectionState.NotStarted,
+    val practiceResult: PracticeResultState = PracticeResultState.NotStarted,
     val debugCsvExport: DebugCsvExportState = DebugCsvExportState.NotStarted,
     val debugRecording: DebugRecordingPlaybackState = DebugRecordingPlaybackState(),
     val errorMessage: String? = null,
