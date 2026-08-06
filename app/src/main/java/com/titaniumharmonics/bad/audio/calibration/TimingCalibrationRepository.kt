@@ -36,11 +36,16 @@ class SharedPreferencesTimingCalibrationStore(context: Context) : TimingCalibrat
         Context.MODE_PRIVATE,
     )
 
-    override fun load(expectedAlgorithmVersion: Int): TimingCalibration? =
-        TimingCalibrationPersistenceCodec.decode(
+    override fun load(expectedAlgorithmVersion: Int): TimingCalibration? {
+        val values = preferences.all
+        if (values.isEmpty()) return null
+        val calibration = TimingCalibrationPersistenceCodec.decode(
             values = preferences.all,
             expectedAlgorithmVersion = expectedAlgorithmVersion,
         )
+        if (calibration == null) preferences.edit().clear().apply()
+        return calibration
+    }
 
     override fun save(calibration: TimingCalibration) {
         check(
@@ -79,10 +84,16 @@ object TimingCalibrationPersistenceCodec {
         runCatching {
             val version = values[SharedPreferencesTimingCalibrationStore.ALGORITHM_VERSION] as? Int
                 ?: return null
-            if (version != expectedAlgorithmVersion) return null
+            val compatibleLegacyPositiveVersion =
+                expectedAlgorithmVersion == TimingCalibrationConfig.CURRENT_ALGORITHM_VERSION &&
+                    version == TimingCalibrationConfig.LEGACY_POSITIVE_OFFSET_VERSION
+            if (version != expectedAlgorithmVersion && !compatibleLegacyPositiveVersion) return null
+            val offsetSamples =
+                values[SharedPreferencesTimingCalibrationStore.OFFSET_SAMPLES] as? Long
+                    ?: return null
+            if (offsetSamples <= 0L) return null
             TimingCalibration(
-                offsetSamples = values[SharedPreferencesTimingCalibrationStore.OFFSET_SAMPLES] as? Long
-                    ?: return null,
+                offsetSamples = offsetSamples,
                 sampleRateHz = values[SharedPreferencesTimingCalibrationStore.SAMPLE_RATE_HZ] as? Int
                     ?: return null,
                 confidence = CalibrationConfidence.valueOf(
@@ -101,7 +112,7 @@ object TimingCalibrationPersistenceCodec {
                 calibratedAtEpochMillis =
                     values[SharedPreferencesTimingCalibrationStore.CALIBRATED_AT] as? Long
                         ?: return null,
-                algorithmVersion = version,
+                algorithmVersion = expectedAlgorithmVersion,
             )
         }.getOrNull()
 }

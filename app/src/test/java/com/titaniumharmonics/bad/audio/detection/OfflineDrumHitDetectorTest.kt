@@ -2,6 +2,7 @@ package com.titaniumharmonics.bad.audio.detection
 
 import com.titaniumharmonics.bad.audio.calibration.CalibrationConfidence
 import com.titaniumharmonics.bad.audio.calibration.TimingCalibration
+import com.titaniumharmonics.bad.audio.calibration.TimingCalibrationConfig
 import com.titaniumharmonics.bad.audio.analysis.AudioAnalysis
 import com.titaniumharmonics.bad.audio.analysis.AudioAnalysisConfig
 import com.titaniumharmonics.bad.audio.analysis.ImmutableFloatSeries
@@ -100,7 +101,7 @@ class OfflineDrumHitDetectorTest {
     }
 
     @Test
-    fun calibrationPreservesRawTimingSupportsSignedOffsetsAndCanBeDisabled() {
+    fun positiveCalibrationPreservesRawTimingMovesHitsEarlierAndCanBeDisabled() {
         val raw = detect(listOf(Event(100, Signal.DRUM)))
         val positive = detect(
             listOf(Event(100, Signal.DRUM)),
@@ -113,14 +114,24 @@ class OfflineDrumHitDetectorTest {
         )
         assertTrue(positive.calibrationApplied)
 
-        val negative = detect(
-            listOf(Event(0, Signal.DRUM)),
-            calibration = calibration(offset = -441L, sampleRate = 44_100),
+        val converted = detect(
+            listOf(Event(100, Signal.DRUM)),
+            calibration = calibration(offset = 441L, sampleRate = 44_100),
         )
         assertEquals(
-            negative.hits.single().rawExerciseSample + 480L,
-            negative.hits.single().calibratedExerciseSample,
+            converted.hits.single().rawExerciseSample - 480L,
+            converted.hits.single().calibratedExerciseSample,
         )
+        assertTrue(
+            converted.hits.single().calibratedExerciseSample <
+                converted.hits.single().rawExerciseSample,
+        )
+        val beforeZero = detect(
+            listOf(Event(0, Signal.DRUM)),
+            calibration = calibration(offset = 480L, sampleRate = 48_000),
+        )
+        assertTrue(beforeZero.hits.single().calibratedExerciseSample < 0L)
+        assertTrue(beforeZero.hits.single().rawExerciseSample >= 0L)
         val disabled = detect(
             listOf(Event(100, Signal.DRUM)),
             calibration = calibration(480L, 48_000),
@@ -243,7 +254,7 @@ class OfflineDrumHitDetectorTest {
         matchedClickCount = 8,
         offsetSpreadSamples = 1,
         calibratedAtEpochMillis = 1,
-        algorithmVersion = 1,
+        algorithmVersion = TimingCalibrationConfig.CURRENT_ALGORITHM_VERSION,
     )
 
     private fun runtimeExercise(): RuntimeExercise {

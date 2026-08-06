@@ -1,6 +1,7 @@
 package com.titaniumharmonics.bad.audio.calibration
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -9,14 +10,43 @@ class CalibrationOffsetEstimatorTest {
     private val estimator = CalibrationOffsetEstimator(config)
 
     @Test
-    fun estimatesZeroPositiveNegativeAndMedianOffsets() {
-        listOf(0L, 2_400L, -1_200L).forEach { offset ->
-            val matches = (0 until 8).map { match(it * 24_000L, offset) }
-            assertEquals(offset, estimator.estimate(matches, 48_000, 123L).getOrThrow().offsetSamples)
-        }
-        val varied = listOf(70L, 71L, 69L, 70L, 72L, 68L, 70L, 5_000L)
+    fun acceptsPositiveOffsetAndRobustPositiveMedianWithNegativeOutlier() {
+        val matches = (0 until 8).map { match(it * 24_000L, 2_400L) }
+        assertEquals(2_400L, estimator.estimate(matches, 48_000, 123L).getOrThrow().offsetSamples)
+        val varied = listOf(70L, 71L, 69L, 70L, 72L, 68L, 70L, -5_000L)
             .mapIndexed { index, offset -> match(index * 24_000L, offset) }
         assertEquals(70L, estimator.estimate(varied, 48_000, 123L).getOrThrow().offsetSamples)
+    }
+
+    @Test
+    fun rejectsZeroAndNegativeFinalMedianBeforeConstructingSuccess() {
+        listOf(0L, -1_200L).forEach { offset ->
+            val matches = (0 until 8).map { match(it * 24_000L, offset) }
+            val failure = estimator.estimate(matches, 48_000, 123L).exceptionOrNull()
+                as CalibrationEstimationException
+            assertEquals(CalibrationFailureReason.NON_POSITIVE_OFFSET, failure.reason)
+            assertEquals(offset, failure.measuredOffsetSamples)
+            assertEquals(8, failure.matchedClickCount)
+            assertTrue(failure.reason.userMessage.contains("invalid timing offset"))
+        }
+    }
+
+    @Test
+    fun successfulCalibrationDomainRejectsNonPositiveConstruction() {
+        listOf(0L, -1L).forEach { offset ->
+            assertThrows(IllegalArgumentException::class.java) {
+                TimingCalibration(
+                    offset,
+                    48_000,
+                    CalibrationConfidence.HIGH,
+                    8,
+                    8,
+                    0,
+                    0,
+                    TimingCalibrationConfig.CURRENT_ALGORITHM_VERSION,
+                )
+            }
+        }
     }
 
     @Test
@@ -42,9 +72,20 @@ class CalibrationOffsetEstimatorTest {
 
     @Test
     fun convertsMillisecondsSampleRatesAndRoundsTiesAwayFromZero() {
-        val calibration = TimingCalibration(4_800L, 48_000, CalibrationConfidence.HIGH, 8, 8, 0, 0, 1)
+        val calibration = TimingCalibration(
+            4_800L,
+            48_000,
+            CalibrationConfidence.HIGH,
+            8,
+            8,
+            0,
+            0,
+            TimingCalibrationConfig.CURRENT_ALGORITHM_VERSION,
+        )
         assertEquals(100.0, calibration.offsetMillis, 0.0)
         assertEquals(4_410L, calibration.offsetSamplesAt(44_100))
+        assertTrue(calibration.offsetSamplesAt(44_100) > 0L)
+        assertEquals(4_700L, calibration.calibrateHit(9_500L, 48_000))
         assertEquals(1L, TimingCalibrationMath.convertSampleRate(1L, 2, 1))
         assertEquals(-1L, TimingCalibrationMath.convertSampleRate(-1L, 2, 1))
         assertEquals(2L, TimingCalibrationMath.median(listOf(1L, 2L)))

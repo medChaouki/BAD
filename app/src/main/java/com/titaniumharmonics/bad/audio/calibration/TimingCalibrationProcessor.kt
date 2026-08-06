@@ -47,6 +47,7 @@ class TimingCalibrationProcessor(
         )
         val estimate = estimator.estimate(matches, wav.format.sampleRateHz, calibratedAtEpochMillis)
         val calibration = estimate.getOrNull()
+        val estimationFailure = estimate.exceptionOrNull() as? CalibrationEstimationException
         val reviewableCalibration = if (calibration == null) {
             createReviewableCalibration(
                 matches = matches,
@@ -57,14 +58,19 @@ class TimingCalibrationProcessor(
             null
         }
         val measuredCalibration = calibration ?: reviewableCalibration
+        val rawOffsets = matches.map(CalibrationClickMatch::offsetSamples)
         val diagnostics = CalibrationDiagnostics(
             wavFilePath = recording.filePath,
             sampleRateHz = wav.format.sampleRateHz,
             totalSampleFrames = wav.sampleFrameCount,
             expectedClickSamples = immutableList(expected.asList()),
             matches = immutableList(matches),
-            medianOffsetSamples = measuredCalibration?.offsetSamples,
-            offsetSpreadSamples = measuredCalibration?.offsetSpreadSamples,
+            medianOffsetSamples = measuredCalibration?.offsetSamples
+                ?: estimationFailure?.measuredOffsetSamples
+                ?: rawOffsets.takeIf(List<Long>::isNotEmpty)?.let(TimingCalibrationMath::median),
+            offsetSpreadSamples = measuredCalibration?.offsetSpreadSamples
+                ?: estimationFailure?.offsetSpreadSamples
+                ?: rawOffsets.takeIf(List<Long>::isNotEmpty)?.let { it.max() - it.min() },
             waveform = downsampleWaveform(samples),
         )
         return if (calibration != null) {
@@ -73,7 +79,7 @@ class TimingCalibrationProcessor(
             val reason = if (matches.isEmpty()) {
                 CalibrationFailureReason.LOW_CORRELATION
             } else {
-                (estimate.exceptionOrNull() as? CalibrationEstimationException)?.reason
+                estimationFailure?.reason
                     ?: CalibrationFailureReason.UNKNOWN
             }
             CalibrationProcessingResult.Failure(
@@ -91,8 +97,10 @@ class TimingCalibrationProcessor(
     ): TimingCalibration? {
         if (matches.isEmpty()) return null
         val offsets = matches.map { it.offsetSamples }
+        val median = TimingCalibrationMath.median(offsets)
+        if (median <= 0L) return null
         return TimingCalibration(
-            offsetSamples = TimingCalibrationMath.median(offsets),
+            offsetSamples = median,
             sampleRateHz = sampleRateHz,
             confidence = CalibrationConfidence.LOW,
             expectedClickCount = configuration.clickCount,

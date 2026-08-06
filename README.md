@@ -471,15 +471,27 @@ calibrationOffsetSamples = recordedClickSample - expectedClickSample
 ```
 
 A positive value means the speaker click arrived later in the recorded PCM
-than its scheduled reference. Offline onset processing corrects a raw hit
-with `rawExerciseRelativeHitSample - calibrationOffsetSamples`. When sample
+than its scheduled reference. Active timing calibrations now enforce a strictly
+positive offset. A robust median of zero or less is rejected as an invalid
+speaker-to-microphone measurement: it is never made reviewable, accepted, or
+persisted, and its sign is never flipped, clamped, or converted to an absolute
+value. Debug diagnostics retain the measured signed median, click matches,
+correlations, spread, and failure reason.
+
+Offline onset processing continues to correct a raw hit with
+`rawExerciseRelativeHitSample - calibrationOffsetSamples`; subtraction is
+unchanged, so a valid calibrated timestamp moves earlier. When sample
 rates differ, the stored offset is converted by duration and rounded to the
 nearest sample, with exact half-sample ties rounded away from zero.
 
 An accepted offset, capture sample rate, confidence, match counts, spread,
 timestamp, and algorithm version are stored locally in app preferences.
 Rejecting or failing a recalibration never replaces the previous valid value;
-reset removes it. Debug builds retain the temporary WAV and show playback, the recorded
+this now also covers zero or negative recalibration measurements. Calibration
+algorithm version 2 introduces the positive-offset invariant. Compatible
+positive version-1 records migrate in memory, while persisted zero, negative,
+malformed, or incompatible records are discarded and the app returns to Not
+calibrated. Reset removes the active value. Debug builds retain the temporary WAV and show playback, the recorded
 waveform, expected and detected click markers, individual correlations, and
 offsets. Release builds delete the temporary recording.
 

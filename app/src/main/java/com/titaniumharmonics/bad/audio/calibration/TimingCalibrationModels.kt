@@ -16,7 +16,7 @@ data class TimingCalibrationConfig(
     val maximumOffsetSpreadMillis: Double = 6.0,
     val highConfidenceCorrelation: Double = 0.65,
     val highConfidenceSpreadMillis: Double = 3.0,
-    val algorithmVersion: Int = 1,
+    val algorithmVersion: Int = CURRENT_ALGORITHM_VERSION,
 ) {
     init {
         require(clickCount > 0 && minimumMatchedClicks in 1..clickCount)
@@ -44,6 +44,11 @@ data class TimingCalibrationConfig(
             (clickCount - 1L) * clickIntervalMillis + trailingSilenceMillis
         return millisecondsToSamples(duration, sampleRateHz).toInt()
     }
+
+    companion object {
+        const val LEGACY_POSITIVE_OFFSET_VERSION = 1
+        const val CURRENT_ALGORITHM_VERSION = 2
+    }
 }
 
 enum class CalibrationConfidence { HIGH, MEDIUM, LOW }
@@ -59,6 +64,7 @@ data class TimingCalibration(
     val algorithmVersion: Int,
 ) {
     init {
+        require(offsetSamples > 0L) { "A timing calibration offset must be positive." }
         require(sampleRateHz > 0)
         require(expectedClickCount > 0 && matchedClickCount in 1..expectedClickCount)
         require(offsetSpreadSamples >= 0L && calibratedAtEpochMillis >= 0L)
@@ -131,6 +137,10 @@ enum class CalibrationFailureReason(val userMessage: String) {
     TOO_FEW_CLICKS("Too few calibration clicks were detected."),
     LOW_CORRELATION("Calibration clicks were too weak or the room was too noisy."),
     INCONSISTENT_TIMING("Detected click timing was inconsistent."),
+    NON_POSITIVE_OFFSET(
+        "Calibration produced an invalid timing offset. Keep the phone still, use the " +
+            "built-in speaker and microphone, and try again in a quiet room.",
+    ),
     INVALID_RECORDING("The calibration recording was invalid."),
     UNSUPPORTED_SAMPLE_RATE("The calibration sample rate is unsupported."),
     CANCELLED("Calibration cancelled."),

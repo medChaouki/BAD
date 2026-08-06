@@ -63,6 +63,26 @@ class TimingCalibrationProcessorTest {
         assertEquals(480L, result.diagnostics?.medianOffsetSamples)
     }
 
+    @Test
+    fun nonPositiveMeasurementsFailWithoutReviewableCalibrationButKeepSignedDiagnostics() {
+        listOf(0, -144).forEach { offset ->
+            val sampleRate = 48_000
+            val config = detectorConfig()
+            val (pcm, _) = recordedClicks(sampleRate, config, offset)
+
+            val result = TimingCalibrationProcessor(config).process(
+                recording = writeWav(pcm, sampleRate),
+                playbackStartSampleFrame = 0L,
+                calibratedAtEpochMillis = 456L,
+            ) as CalibrationProcessingResult.Failure
+
+            assertEquals(CalibrationFailureReason.NON_POSITIVE_OFFSET, result.reason)
+            assertEquals(null, result.reviewableCalibration)
+            assertEquals(offset.toLong(), result.diagnostics?.medianOffsetSamples)
+            assertEquals(config.clickCount, result.diagnostics?.matches?.size)
+        }
+    }
+
     private fun writeWav(samples: ShortArray, sampleRateHz: Int): FinalizedRecording {
         val file = File.createTempFile("bad-calibration", ".wav").apply { deleteOnExit() }
         file.outputStream().buffered().use { output ->

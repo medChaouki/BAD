@@ -155,6 +155,20 @@ class DebugAudioAnalysisToolsTest {
     }
 
     @Test
+    fun positiveCalibrationPlacesCalibratedGraphMarkerBeforeRawMarker() {
+        val wav = writeTestWav(ShortArray(144_000))
+        val session = recordedSessionForWav(wav, 48_000, 144_000L, 48_000L)
+        val timeline = DebugAnalysisTimeline(session)
+        val rawSample = 24_000L
+        val calibratedSample = 20_000L
+
+        val rawPosition = timeline.normalizedWavPositionForExerciseSample(rawSample)
+        val calibratedPosition = timeline.normalizedWavPositionForExerciseSample(calibratedSample)
+
+        assertTrue(calibratedPosition < rawPosition)
+    }
+
+    @Test
     fun downsamplingPreservesIsolatedPeakAndLocalExtremaWithinLimit() {
         val envelope = FloatArray(10_000) { 0.1f }
         envelope[1_234] = 1.0f
