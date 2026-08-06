@@ -8,7 +8,10 @@ import com.titaniumharmonics.bad.audio.matching.RuntimeExerciseSampleTimeline
 import kotlinx.coroutines.CancellationException
 
 sealed interface PracticeResultProcessingResult {
-    data class Success(val result: PracticeResult) : PracticeResultProcessingResult
+    data class Success(
+        val result: PracticeResult,
+        val graphModel: ProductionGraphModel,
+    ) : PracticeResultProcessingResult
     data class Failure(val reason: PracticeResultFailure) : PracticeResultProcessingResult
 }
 
@@ -24,12 +27,19 @@ sealed class PracticeResultFailure(val userMessage: String) {
     data object ProcessingFailed : PracticeResultFailure(
         "The practice result could not be calculated.",
     )
+
+    data object GraphUnavailable : PracticeResultFailure(
+        "The practice result graph could not be prepared safely.",
+    )
 }
 
 sealed interface PracticeResultState {
     data object NotStarted : PracticeResultState
     data object Matching : PracticeResultState
-    data class Ready(val result: PracticeResult) : PracticeResultState
+    data class Ready(
+        val result: PracticeResult,
+        val graphModel: ProductionGraphModel,
+    ) : PracticeResultState
     data class Failed(val message: String) : PracticeResultState
 }
 
@@ -62,7 +72,12 @@ class PracticeResultProcessor {
                 metronomeSnapshot = session.metronomeSnapshot,
             )
             cancellationCheck()
-            PracticeResultProcessingResult.Success(result)
+            when (val graph = ProductionGraphModelBuilder.build(result, analysis)) {
+                is ProductionGraphBuildResult.Success ->
+                    PracticeResultProcessingResult.Success(result, graph.model)
+                is ProductionGraphBuildResult.Failure ->
+                    PracticeResultProcessingResult.Failure(PracticeResultFailure.GraphUnavailable)
+            }
         } catch (exception: CancellationException) {
             throw exception
         } catch (_: Exception) {

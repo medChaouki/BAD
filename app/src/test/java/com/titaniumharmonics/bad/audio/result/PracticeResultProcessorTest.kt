@@ -40,6 +40,8 @@ class PracticeResultProcessorTest {
         assertEquals(fixture.session.judgementSnapshot, processed.result.judgementSnapshot)
         assertEquals(fixture.session.detectionSnapshot, processed.result.detectionSnapshot)
         assertEquals(fixture.session.metronomeSnapshot, processed.result.metronomeSnapshot)
+        assertEquals(fixture.session.runtimeExercise.id, processed.graphModel.exerciseId)
+        assertTrue(processed.graphModel.envelopePoints.size <= ProductionGraphModel.MAXIMUM_ENVELOPE_POINT_COUNT)
     }
 
     @Test
@@ -176,4 +178,3 @@ class PracticeResultProcessorTest {
         val detection: HitDetectionResult,
     )
 }
-

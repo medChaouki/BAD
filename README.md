@@ -442,6 +442,25 @@ Detailed results list expected and calibrated detected timing without exposing
 raw DSP diagnostics. Retry keeps the same exercise but starts a completely new
 recording with fresh configuration snapshots.
 
+Results also include a permanent production performance graph. Its bounded,
+peak-preserving post-notch envelope provides signal context while expected-note
+lines, calibrated actual-hit markers, timing-error connectors, and distinct
+Early, On Time, Late, Missed, and Extra shapes explain the musical outcome.
+Marker size represents run-relative hit intensity. Explicit zoom, pan, and Fit
+controls navigate exercise-relative time, and tapping a marker opens an
+accessible calibrated-timing detail panel. The detailed note list remains the
+non-graph fallback.
+
+Production hit markers use the same calibrated exercise timeline as matching,
+judgement, statistics, future saved runs, and progress tracking. Raw hit timing
+remains debug-only. Calibration is not reapplied by the graph, and the
+post-notch envelope remains at its original recorded position, so a calibrated
+physical-strike marker may correctly appear slightly before its visible signal
+peak. The bounded production graph contains no WAV path or PCM and remains
+usable after temporary audio is deleted. In debug builds, the detailed WAV,
+DSP graph, playback, and CSV tools are hidden by default behind an explicit
+`Open debug analysis` action on Results.
+
 Current practice recordings retain structural software sample alignment. The
 calibration below measures the remaining fixed phone audio-path offset and is
 now applied to offline detected hits.
@@ -544,8 +563,8 @@ Run Android lint:
 
 ## Planned version 1 work
 
-1. Add the production signal and judgement graph (PR 6.4)
-2. Persist completed runs, history, and progress tracking (PR 7)
+1. Persist completed runs and production graphs (PR 7)
+2. Add history and progress tracking (PR 7)
 
 Version 1 intentionally uses one generic rhythmic lane. Separate kick, snare,
 hi-hat, and tom lanes are future extensions.

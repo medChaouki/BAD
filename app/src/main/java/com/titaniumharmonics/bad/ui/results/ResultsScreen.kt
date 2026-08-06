@@ -21,18 +21,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.titaniumharmonics.bad.audio.result.PracticeResult
+import com.titaniumharmonics.bad.audio.result.ProductionGraphModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultsScreen(
     result: PracticeResult,
+    graphModel: ProductionGraphModel,
     showDetails: Boolean,
     onOpenDetails: () -> Unit,
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onReturnToPractice: () -> Unit,
     onReturnToLibrary: () -> Unit,
-    graphContent: @Composable (() -> Unit)? = null,
+    onOpenDebug: (() -> Unit)? = null,
 ) {
     Scaffold(
         topBar = {
@@ -47,11 +49,12 @@ fun ResultsScreen(
         } else {
             ResultOverview(
                 result = result,
+                graphModel = graphModel,
                 onOpenDetails = onOpenDetails,
                 onRetry = onRetry,
                 onReturnToPractice = onReturnToPractice,
                 onReturnToLibrary = onReturnToLibrary,
-                graphContent = graphContent,
+                onOpenDebug = onOpenDebug,
                 modifier = Modifier.padding(padding),
             )
         }
@@ -61,11 +64,12 @@ fun ResultsScreen(
 @Composable
 private fun ResultOverview(
     result: PracticeResult,
+    graphModel: ProductionGraphModel,
     onOpenDetails: () -> Unit,
     onRetry: () -> Unit,
     onReturnToPractice: () -> Unit,
     onReturnToLibrary: () -> Unit,
-    graphContent: @Composable (() -> Unit)?,
+    onOpenDebug: (() -> Unit)?,
     modifier: Modifier,
 ) {
     LazyColumn(
@@ -80,8 +84,15 @@ private fun ResultOverview(
             }
         }
         item { ResultsSummary(result) }
-        graphContent?.let { graph -> item { graph() } }
+        item { ProductionResultGraph(graphModel) }
         item { Button(onClick = onOpenDetails, modifier = Modifier.fillMaxWidth()) { Text("Detailed results") } }
+        onOpenDebug?.let { openDebug ->
+            item {
+                OutlinedButton(onClick = openDebug, modifier = Modifier.fillMaxWidth()) {
+                    Text("Open debug analysis")
+                }
+            }
+        }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onRetry, modifier = Modifier.weight(1f)) { Text("Retry") }

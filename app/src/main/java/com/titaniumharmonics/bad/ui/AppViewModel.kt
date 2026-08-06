@@ -8,6 +8,7 @@ import com.titaniumharmonics.bad.audio.calibration.SharedPreferencesTimingCalibr
 import com.titaniumharmonics.bad.audio.calibration.TimingCalibration
 import com.titaniumharmonics.bad.audio.calibration.TimingCalibrationRepository
 import com.titaniumharmonics.bad.audio.result.PracticeResult
+import com.titaniumharmonics.bad.audio.result.ProductionGraphModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,7 +45,9 @@ class AppViewModel(
             editorDocumentUri = null,
             editorReturnDestination = AppDestination.PRACTICE,
             practiceResult = null,
+            productionGraph = null,
             resultsDetailVisible = false,
+            resultsDebugVisible = false,
         )
     }
 
@@ -85,8 +88,8 @@ class AppViewModel(
         mutableUiState.value = mutableUiState.value.openSettings()
     }
 
-    fun openResults(result: PracticeResult) {
-        mutableUiState.value = mutableUiState.value.openResults(result)
+    fun openResults(result: PracticeResult, graphModel: ProductionGraphModel) {
+        mutableUiState.value = mutableUiState.value.openResults(result, graphModel)
     }
 
     fun showResultDetails() {
@@ -96,11 +99,23 @@ class AppViewModel(
         }
     }
 
+    fun showResultDebug() {
+        val state = mutableUiState.value
+        if (state.destination == AppDestination.RESULTS && state.practiceResult != null) {
+            mutableUiState.value = state.copy(
+                resultsDetailVisible = false,
+                resultsDebugVisible = true,
+            )
+        }
+    }
+
     fun leaveResultsForPractice() {
         mutableUiState.value = mutableUiState.value.copy(
             destination = AppDestination.PRACTICE,
             practiceResult = null,
+            productionGraph = null,
             resultsDetailVisible = false,
+            resultsDebugVisible = false,
         )
     }
 

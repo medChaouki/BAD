@@ -2,6 +2,7 @@ package com.titaniumharmonics.bad.ui
 
 import com.titaniumharmonics.bad.audio.calibration.TimingCalibration
 import com.titaniumharmonics.bad.audio.result.PracticeResult
+import com.titaniumharmonics.bad.audio.result.ProductionGraphModel
 
 enum class AppDestination {
     PRACTICE,
@@ -28,7 +29,9 @@ data class AppUiState(
     val storageInitializationComplete: Boolean = false,
     val activeTimingCalibration: TimingCalibration? = null,
     val practiceResult: PracticeResult? = null,
+    val productionGraph: ProductionGraphModel? = null,
     val resultsDetailVisible: Boolean = false,
+    val resultsDebugVisible: Boolean = false,
 )
 
 internal fun initialAppUiState(calibration: TimingCalibration?): AppUiState = AppUiState(
@@ -47,7 +50,9 @@ internal fun AppUiState.openExerciseLibrary(
     exerciseLibraryPurpose = purpose,
     editorDocumentUri = null,
     practiceResult = null,
+    productionGraph = null,
     resultsDetailVisible = false,
+    resultsDebugVisible = false,
 )
 
 internal fun AppUiState.openLibraryExercise(documentUri: String): AppUiState =
@@ -70,17 +75,24 @@ internal fun AppUiState.playEditorExercise(documentUri: String): AppUiState = co
     startPracticeAfterLoad = true,
     editorDocumentUri = null,
     practiceResult = null,
+    productionGraph = null,
     resultsDetailVisible = false,
+    resultsDebugVisible = false,
 )
 
 internal fun AppUiState.openSettings(): AppUiState = copy(
     destination = AppDestination.SETTINGS,
 )
 
-internal fun AppUiState.openResults(result: PracticeResult): AppUiState = copy(
+internal fun AppUiState.openResults(
+    result: PracticeResult,
+    graphModel: ProductionGraphModel,
+): AppUiState = copy(
     destination = AppDestination.RESULTS,
     practiceResult = result,
+    productionGraph = graphModel,
     resultsDetailVisible = false,
+    resultsDebugVisible = false,
 )
 
 internal fun AppUiState.navigateBack(): AppUiState = when (destination) {
@@ -95,10 +107,13 @@ internal fun AppUiState.navigateBack(): AppUiState = when (destination) {
     -> copy(destination = AppDestination.PRACTICE)
     AppDestination.RESULTS -> if (resultsDetailVisible) {
         copy(resultsDetailVisible = false)
+    } else if (resultsDebugVisible) {
+        copy(resultsDebugVisible = false)
     } else {
         copy(
             destination = AppDestination.PRACTICE,
             practiceResult = null,
+            productionGraph = null,
         )
     }
 }

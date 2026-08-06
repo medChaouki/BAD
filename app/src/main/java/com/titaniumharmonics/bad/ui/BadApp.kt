@@ -10,9 +10,11 @@ import com.titaniumharmonics.bad.ui.editor.ExerciseEditorRoute
 import com.titaniumharmonics.bad.ui.library.ExerciseLibraryRoute
 import com.titaniumharmonics.bad.ui.practice.PracticeRoute
 import com.titaniumharmonics.bad.ui.practice.PracticeViewModel
+import com.titaniumharmonics.bad.ui.practice.DebugAnalysisRoute
 import com.titaniumharmonics.bad.ui.results.ResultsScreen
 import com.titaniumharmonics.bad.ui.calibration.TimingCalibrationRoute
 import com.titaniumharmonics.bad.ui.settings.SettingsRoute
+import com.titaniumharmonics.bad.BuildConfig
 
 @Composable
 fun BadApp(
@@ -22,7 +24,9 @@ fun BadApp(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     BackHandler(enabled = uiState.destination != AppDestination.PRACTICE) {
-        if (uiState.destination == AppDestination.RESULTS && !uiState.resultsDetailVisible) {
+        if (uiState.destination == AppDestination.RESULTS &&
+            !uiState.resultsDetailVisible && !uiState.resultsDebugVisible
+        ) {
             practiceViewModel.prepareForNextRun()
         }
         viewModel.navigateBack()
@@ -74,15 +78,24 @@ fun BadApp(
         }
         AppDestination.RESULTS -> {
             val result = uiState.practiceResult
-            if (result == null) {
+            val graph = uiState.productionGraph
+            if (result == null || graph == null) {
                 LaunchedEffect(Unit) { viewModel.leaveResultsForPractice() }
+            } else if (BuildConfig.DEBUG && uiState.resultsDebugVisible) {
+                DebugAnalysisRoute(
+                    onNavigateBack = viewModel::navigateBack,
+                    viewModel = practiceViewModel,
+                )
             } else {
                 ResultsScreen(
                     result = result,
+                    graphModel = graph,
                     showDetails = uiState.resultsDetailVisible,
                     onOpenDetails = viewModel::showResultDetails,
                     onBack = {
-                        if (!uiState.resultsDetailVisible) practiceViewModel.prepareForNextRun()
+                        if (!uiState.resultsDetailVisible && !uiState.resultsDebugVisible) {
+                            practiceViewModel.prepareForNextRun()
+                        }
                         viewModel.navigateBack()
                     },
                     onRetry = {
@@ -97,6 +110,7 @@ fun BadApp(
                         practiceViewModel.unloadExercise()
                         viewModel.openExerciseLibraryForPractice()
                     },
+                    onOpenDebug = if (BuildConfig.DEBUG) viewModel::showResultDebug else null,
                 )
             }
         }

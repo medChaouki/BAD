@@ -10,6 +10,20 @@ import org.junit.Test
 
 class AppUiStateTest {
     @Test
+    fun debugResultsAreHiddenByDefaultAndBackReturnsToResultsSummary() {
+        val state = AppUiState(
+            destination = AppDestination.RESULTS,
+            resultsDebugVisible = true,
+        )
+
+        val results = state.navigateBack()
+
+        assertEquals(AppDestination.RESULTS, results.destination)
+        assertFalse(results.resultsDebugVisible)
+        assertFalse(AppUiState(destination = AppDestination.RESULTS).resultsDebugVisible)
+    }
+
+    @Test
     fun resultsBackClosesDetailsBeforeReturningToPractice() {
         val details = AppUiState(
             destination = AppDestination.RESULTS,

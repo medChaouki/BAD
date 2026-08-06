@@ -764,7 +764,7 @@ class PracticeViewModel(
             mutableUiState.value = mutableUiState.value.copy(
                 practiceResult = when (processed) {
                     is PracticeResultProcessingResult.Success ->
-                        PracticeResultState.Ready(processed.result)
+                        PracticeResultState.Ready(processed.result, processed.graphModel)
                     is PracticeResultProcessingResult.Failure ->
                         PracticeResultState.Failed(processed.reason.userMessage)
                 },

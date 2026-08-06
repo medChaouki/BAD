@@ -34,6 +34,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -66,10 +67,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
-import com.titaniumharmonics.bad.BuildConfig
 import com.titaniumharmonics.bad.R
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
 import com.titaniumharmonics.bad.audio.result.PracticeResult
+import com.titaniumharmonics.bad.audio.result.ProductionGraphModel
 import com.titaniumharmonics.bad.audio.result.PracticeResultState
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
 import com.titaniumharmonics.bad.audio.RecordedSession
@@ -99,7 +100,7 @@ fun PracticeRoute(
     onDocumentLoadConsumed: () -> Unit,
     fileOperationsEnabled: Boolean,
     onOpenSettings: () -> Unit,
-    onResultsReady: (PracticeResult) -> Unit,
+    onResultsReady: (PracticeResult, ProductionGraphModel) -> Unit,
     viewModel: PracticeViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -118,16 +119,6 @@ fun PracticeRoute(
             viewModel.onMicrophonePermissionDenied()
         }
         startAfterPermissionGrant = false
-    }
-    val debugCsvLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/csv"),
-    ) { uri ->
-        uri?.let { viewModel.exportDebugAnalysisCsv(it.toString()) }
-    }
-    val debugHitCsvLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/csv"),
-    ) { uri ->
-        uri?.let { viewModel.exportDebugHitCsv(it.toString()) }
     }
     val requestSessionStart = {
         if (ContextCompat.checkSelfPermission(
@@ -173,7 +164,7 @@ fun PracticeRoute(
 
     LaunchedEffect(uiState.practiceResult) {
         val ready = uiState.practiceResult as? PracticeResultState.Ready
-        if (ready != null) onResultsReady(ready.result)
+        if (ready != null) onResultsReady(ready.result, ready.graphModel)
     }
 
     DisposableEffect(lifecycleOwner, viewModel) {
@@ -215,19 +206,56 @@ fun PracticeRoute(
         onDownbeatsOnlyChange = viewModel::setDownbeatsOnly,
         onDecreaseMeasureCount = viewModel::decreaseMeasureCount,
         onIncreaseMeasureCount = viewModel::increaseMeasureCount,
-        onPlayDebugRecording = viewModel::playDebugRecording,
-        onPauseDebugRecording = viewModel::pauseDebugRecording,
-        onStopDebugRecording = viewModel::stopDebugRecording,
-        onReplayDebugRecording = viewModel::replayDebugRecording,
-        onDeleteDebugRecording = viewModel::deleteDebugRecording,
-        onExportDebugCsv = {
-            debugCsvLauncher.launch("bad-audio-analysis.csv")
-        },
-        onExportDebugHitCsv = {
-            debugHitCsvLauncher.launch("bad-hit-candidates.csv")
-        },
         onOpenSettings = onOpenSettings,
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DebugAnalysisRoute(
+    onNavigateBack: () -> Unit,
+    viewModel: PracticeViewModel,
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val debugCsvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri -> uri?.let { viewModel.exportDebugAnalysisCsv(it.toString()) } }
+    val debugHitCsvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri -> uri?.let { viewModel.exportDebugHitCsv(it.toString()) } }
+
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Debug analysis") },
+                navigationIcon = { TextButton(onClick = onNavigateBack) { Text("Back") } },
+            )
+        },
+    ) { padding ->
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+        ) {
+            DebugRecordedAudioCard(
+                state = uiState.debugRecording,
+                recordedSession = uiState.recordedSession,
+                analysisState = uiState.audioAnalysis,
+                detectionState = uiState.hitDetection,
+                resultState = uiState.practiceResult,
+                csvExportState = uiState.debugCsvExport,
+                onPlay = viewModel::playDebugRecording,
+                onPause = viewModel::pauseDebugRecording,
+                onStop = viewModel::stopDebugRecording,
+                onReplay = viewModel::replayDebugRecording,
+                onDelete = viewModel::deleteDebugRecording,
+                onExportCsv = { debugCsvLauncher.launch("bad-audio-analysis.csv") },
+                onExportHitCsv = { debugHitCsvLauncher.launch("bad-hit-candidates.csv") },
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+    }
 }
 
 internal fun navigateAwayFromPracticeForEditing(
@@ -257,13 +285,6 @@ fun PracticeScreen(
     onDownbeatsOnlyChange: (Boolean) -> Unit,
     onDecreaseMeasureCount: () -> Unit,
     onIncreaseMeasureCount: () -> Unit,
-    onPlayDebugRecording: () -> Unit,
-    onPauseDebugRecording: () -> Unit,
-    onStopDebugRecording: () -> Unit,
-    onReplayDebugRecording: () -> Unit,
-    onDeleteDebugRecording: () -> Unit,
-    onExportDebugCsv: () -> Unit,
-    onExportDebugHitCsv: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val playbackExercise = uiState.playbackExercise
@@ -278,13 +299,6 @@ fun PracticeScreen(
             onResume = onResume,
             onRepeat = onRepeat,
             onStop = onStop,
-            onPlayDebugRecording = onPlayDebugRecording,
-            onPauseDebugRecording = onPauseDebugRecording,
-            onStopDebugRecording = onStopDebugRecording,
-            onReplayDebugRecording = onReplayDebugRecording,
-            onDeleteDebugRecording = onDeleteDebugRecording,
-            onExportDebugCsv = onExportDebugCsv,
-            onExportDebugHitCsv = onExportDebugHitCsv,
         )
         return
     }
@@ -409,13 +423,6 @@ private fun FullScreenPracticePlayer(
     onResume: () -> Unit,
     onRepeat: () -> Unit,
     onStop: () -> Unit,
-    onPlayDebugRecording: () -> Unit,
-    onPauseDebugRecording: () -> Unit,
-    onStopDebugRecording: () -> Unit,
-    onReplayDebugRecording: () -> Unit,
-    onDeleteDebugRecording: () -> Unit,
-    onExportDebugCsv: () -> Unit,
-    onExportDebugHitCsv: () -> Unit,
 ) {
     val timing = remember(exercise) { ExerciseTiming(exercise) }
     val timelineElapsedNanos = when (uiState.phase) {
@@ -491,27 +498,6 @@ private fun FullScreenPracticePlayer(
                     modifier = Modifier.padding(horizontal = 20.dp),
                 )
             }
-        }
-        if (BuildConfig.DEBUG && uiState.phase == PracticePhase.COMPLETED) {
-            DebugRecordedAudioCard(
-                state = uiState.debugRecording,
-                recordedSession = uiState.recordedSession,
-                analysisState = uiState.audioAnalysis,
-                detectionState = uiState.hitDetection,
-                resultState = uiState.practiceResult,
-                csvExportState = uiState.debugCsvExport,
-                onPlay = onPlayDebugRecording,
-                onPause = onPauseDebugRecording,
-                onStop = onStopDebugRecording,
-                onReplay = onReplayDebugRecording,
-                onDelete = onDeleteDebugRecording,
-                onExportCsv = onExportDebugCsv,
-                onExportHitCsv = onExportDebugHitCsv,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(horizontal = 20.dp),
-            )
-
         }
         Row(
             modifier = Modifier
@@ -1573,13 +1559,6 @@ private fun PracticeScreenPreview() {
             onDownbeatsOnlyChange = {},
             onDecreaseMeasureCount = {},
             onIncreaseMeasureCount = {},
-            onPlayDebugRecording = {},
-            onPauseDebugRecording = {},
-            onStopDebugRecording = {},
-            onReplayDebugRecording = {},
-            onDeleteDebugRecording = {},
-            onExportDebugCsv = {},
-            onExportDebugHitCsv = {},
             onOpenSettings = {},
         )
     }
