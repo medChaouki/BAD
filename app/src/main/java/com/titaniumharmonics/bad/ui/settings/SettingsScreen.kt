@@ -205,6 +205,15 @@ private fun JudgementSettingsCard(
                 1.0,
                 actions::setMinimumConfidence,
             )
+            DecimalStepper(
+                "Minimum hit rate for verdict",
+                configuration.minimumHitRateForVerdict * 100.0,
+                5.0,
+                0.0,
+                100.0,
+                { actions.setMinimumHitRateForVerdict(it / 100.0) },
+                "%",
+            )
             LabelledSwitch(
                 "Extra-hit handling enabled",
                 configuration.extraHitHandlingEnabled,

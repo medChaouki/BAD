@@ -92,6 +92,10 @@ class AppViewModel(
         mutableUiState.value = mutableUiState.value.openResults(result, graphModel)
     }
 
+    fun openProcessing() {
+        mutableUiState.value = mutableUiState.value.openProcessing()
+    }
+
     fun showResultDetails() {
         val state = mutableUiState.value
         if (state.destination == AppDestination.RESULTS && state.practiceResult != null) {

@@ -29,13 +29,14 @@ object JudgementConfigurationCodec {
         "maximum_early_ms" to value.maximumEarlyMillis.toString(),
         "maximum_late_ms" to value.maximumLateMillis.toString(),
         "minimum_confidence" to value.minimumDetectedHitConfidence.toString(),
+        "minimum_hit_rate_for_verdict" to value.minimumHitRateForVerdict.toString(),
         "extra_hit_handling_enabled" to value.extraHitHandlingEnabled,
     )
 
     fun decode(values: Map<String, *>): JudgementConfiguration = runCatching {
         if (values.isEmpty()) return JudgementConfiguration.DEFAULT
         val version = values["version"] as? Int ?: return JudgementConfiguration.DEFAULT
-        if (version != JudgementConfiguration.CURRENT_VERSION) {
+        if (version !in 1..JudgementConfiguration.CURRENT_VERSION) {
             return JudgementConfiguration.DEFAULT
         }
         JudgementConfiguration(
@@ -44,8 +45,13 @@ object JudgementConfigurationCodec {
             maximumEarlyMillis = values.double("maximum_early_ms"),
             maximumLateMillis = values.double("maximum_late_ms"),
             minimumDetectedHitConfidence = values.double("minimum_confidence"),
+            minimumHitRateForVerdict = if (version >= 2) {
+                values.double("minimum_hit_rate_for_verdict")
+            } else {
+                JudgementConfiguration.DEFAULT_MINIMUM_HIT_RATE_FOR_VERDICT
+            },
             extraHitHandlingEnabled = values.boolean("extra_hit_handling_enabled"),
-            version = version,
+            version = JudgementConfiguration.CURRENT_VERSION,
         )
     }.getOrDefault(JudgementConfiguration.DEFAULT)
 

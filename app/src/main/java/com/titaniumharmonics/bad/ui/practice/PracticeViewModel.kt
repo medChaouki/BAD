@@ -32,6 +32,7 @@ import com.titaniumharmonics.bad.audio.matching.SessionJudgementSnapshot
 import com.titaniumharmonics.bad.audio.result.PracticeResultProcessingResult
 import com.titaniumharmonics.bad.audio.result.PracticeResultProcessor
 import com.titaniumharmonics.bad.audio.result.PracticeResultState
+import com.titaniumharmonics.bad.audio.result.PracticeVerdictCalculator
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseCompilationResult
 import com.titaniumharmonics.bad.exercise.ExerciseCompiler
@@ -293,6 +294,9 @@ class PracticeViewModel(
 
                     if (progress.phase == PlaybackPhase.COMPLETED) {
                         completedNormally = true
+                        mutableUiState.value = mutableUiState.value.copy(
+                            phase = PracticePhase.PROCESSING,
+                        )
                         break
                     }
                     delay(UI_UPDATE_INTERVAL_MILLIS)
@@ -635,7 +639,10 @@ class PracticeViewModel(
         stopPlayback()
         debugAudioJob?.cancel()
         debugPositionJob?.cancel()
-        if (audioAnalysisJob?.isActive == true) {
+        if (
+            mutableUiState.value.phase != PracticePhase.PROCESSING &&
+            audioAnalysisJob?.isActive == true
+        ) {
             audioAnalysisJob?.cancel()
             mutableUiState.value = mutableUiState.value.copy(
                 audioAnalysis = AudioAnalysisState.NotStarted,
@@ -643,13 +650,18 @@ class PracticeViewModel(
                 practiceResult = PracticeResultState.NotStarted,
             )
         }
-        if (practiceResultJob?.isActive == true) {
+        if (
+            mutableUiState.value.phase != PracticePhase.PROCESSING &&
+            practiceResultJob?.isActive == true
+        ) {
             practiceResultJob?.cancel()
             mutableUiState.value = mutableUiState.value.copy(
                 practiceResult = PracticeResultState.NotStarted,
             )
         }
-        practiceResultJob = null
+        if (mutableUiState.value.phase != PracticePhase.PROCESSING) {
+            practiceResultJob = null
+        }
         csvExportJob?.cancel()
         viewModelScope.launch(Dispatchers.IO) {
             practiceRecordingCoordinator.cancelSession()
@@ -689,6 +701,8 @@ class PracticeViewModel(
         mutableUiState.value = mutableUiState.value.copy(
             audioAnalysis = AudioAnalysisState.Processing,
             hitDetection = HitDetectionState.NotStarted,
+            practiceResult = PracticeResultState.NotStarted,
+            practiceVerdict = null,
             debugCsvExport = DebugCsvExportState.NotStarted,
         )
         audioAnalysisJob = viewModelScope.launch(Dispatchers.IO) {
@@ -761,14 +775,34 @@ class PracticeViewModel(
             )
             coroutineContext.ensureActive()
             if (mutableUiState.value.recordedSession !== recordedSession) return@launch
-            mutableUiState.value = mutableUiState.value.copy(
-                practiceResult = when (processed) {
-                    is PracticeResultProcessingResult.Success ->
-                        PracticeResultState.Ready(processed.result, processed.graphModel)
-                    is PracticeResultProcessingResult.Failure ->
-                        PracticeResultState.Failed(processed.reason.userMessage)
-                },
-            )
+            mutableUiState.value = when (processed) {
+                is PracticeResultProcessingResult.Success -> mutableUiState.value.copy(
+                    practiceResult = PracticeResultState.Ready(
+                        processed.result,
+                        processed.graphModel,
+                    ),
+                    practiceVerdict = PracticeVerdictCalculator.calculate(
+                        processed.result,
+                        recordedSession.judgementSnapshot,
+                    ),
+                )
+                is PracticeResultProcessingResult.Failure -> mutableUiState.value.copy(
+                    practiceResult = PracticeResultState.Failed(processed.reason.userMessage),
+                    practiceVerdict = null,
+                )
+            }
+        }
+    }
+
+    fun retryProcessing() {
+        val state = mutableUiState.value
+        val recordedSession = state.recordedSession ?: return
+        val analysis = (state.audioAnalysis as? AudioAnalysisState.Ready)?.analysis
+        val detection = (state.hitDetection as? HitDetectionState.Ready)?.result
+        when {
+            analysis != null && detection != null ->
+                startPracticeResultProcessing(recordedSession, analysis, detection)
+            else -> startAudioAnalysis(recordedSession)
         }
     }
 
@@ -790,6 +824,7 @@ class PracticeViewModel(
             audioAnalysis = AudioAnalysisState.NotStarted,
             hitDetection = HitDetectionState.NotStarted,
             practiceResult = PracticeResultState.NotStarted,
+            practiceVerdict = null,
             debugCsvExport = DebugCsvExportState.NotStarted,
             debugRecording = debugRecordingController.state,
             errorMessage = null,

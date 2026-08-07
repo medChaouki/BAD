@@ -434,9 +434,41 @@ missed notes have no intensity.
 session start, and completed recordings retain it. Later settings edits cannot
 mutate that snapshot or an assembled result.
 
+Natural completion now opens a dedicated black Processing screen before Results.
+It replaces the previous generic completion/loading treatment with B.A.D.'s
+inspection sequence. **YOU HAVE BEEN WEIGHED...** remains visible while the WAV
+is finalized and audio preprocessing runs. **YOU HAVE BEEN MEASURED...** begins
+only after preprocessing completes and remains while hit detection, matching,
+result assembly, statistics, and the production graph finish. The trailing dots
+cycle from one to three; there is no spinner, progress bar, percentage, graph, or
+debug data. Back navigation is disabled so the active analysis is not interrupted.
+Each loading message remains visible for at least 1.5 seconds, measured from
+when that stage is displayed, so Weighed and Measured receive equal presentation
+time. Slow analysis remains on the relevant message until its real pipeline
+boundary completes.
+
+Once the complete `PracticeResult` exists, the screen announces **AND YOU HAVE
+BEEN FOUND...** followed by **EARLY**, **ON TIME**, **LATE**, or **MISSING** for
+900 ms, then opens Results automatically. `PracticeVerdictCalculator` is a pure
+Kotlin component. When hit rate (matched expected notes divided by all expected
+notes) is below `minimumHitRateForVerdict`, the verdict is `MISSING` and timing
+bias is deliberately ignored. Zero expected notes and runs with no matched timing
+also produce `MISSING`. Otherwise, the already-computed signed mean timing error
+is Early below the negative On-Time-before boundary, Late above the On-Time-after
+boundary, and On Time at or between those inclusive boundaries.
+
+`minimumHitRateForVerdict` is configurable in Settings from 0% through 100% and
+defaults to 30%. Like the other judgement settings, it is persisted locally,
+validated, resettable, and frozen into `SessionJudgementSnapshot` when a run
+starts. A later Settings change therefore affects only future sessions; a
+completed result's verdict always uses its frozen threshold and timing windows.
+The verdict is not the user's score. It is only a high-level summary of the
+player's overall timing tendency, and `MISSING` means there was insufficient
+matched playing for responsible Early/Late feedback.
+
 After offline hit detection completes, the app validates the completed session
-snapshots, matches detected hits, assembles the current-run result, and opens a
-user-facing Results screen. It reports Early, On Time, Late, Missed, and Extra
+snapshots, matches detected hits, assembles the current-run result, presents the
+inspection verdict, and opens a user-facing Results screen. Results reports Early, On Time, Late, Missed, and Extra
 outcomes, accuracy, hit rate, timing statistics, and relative intensity.
 Detailed results list expected and calibrated detected timing without exposing
 raw DSP diagnostics. Retry keeps the same exercise but starts a completely new

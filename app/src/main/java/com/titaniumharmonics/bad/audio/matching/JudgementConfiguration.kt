@@ -6,6 +6,7 @@ data class JudgementConfiguration(
     val maximumEarlyMillis: Double = DEFAULT_MAXIMUM_EARLY_MILLIS,
     val maximumLateMillis: Double = DEFAULT_MAXIMUM_LATE_MILLIS,
     val minimumDetectedHitConfidence: Double = DEFAULT_MINIMUM_CONFIDENCE,
+    val minimumHitRateForVerdict: Double = DEFAULT_MINIMUM_HIT_RATE_FOR_VERDICT,
     val extraHitHandlingEnabled: Boolean = true,
     val version: Int = CURRENT_VERSION,
 ) {
@@ -20,16 +21,21 @@ data class JudgementConfiguration(
             minimumDetectedHitConfidence.isFinite() &&
                 minimumDetectedHitConfidence in 0.0..1.0,
         )
+        require(
+            minimumHitRateForVerdict.isFinite() &&
+                minimumHitRateForVerdict in 0.0..1.0,
+        )
         require(version > 0)
     }
 
     companion object {
-        const val CURRENT_VERSION = 1
+        const val CURRENT_VERSION = 2
         const val DEFAULT_ON_TIME_BEFORE_MILLIS = 40.0
         const val DEFAULT_ON_TIME_AFTER_MILLIS = 40.0
         const val DEFAULT_MAXIMUM_EARLY_MILLIS = 120.0
         const val DEFAULT_MAXIMUM_LATE_MILLIS = 120.0
         const val DEFAULT_MINIMUM_CONFIDENCE = 0.30
+        const val DEFAULT_MINIMUM_HIT_RATE_FOR_VERDICT = 0.30
         const val MINIMUM_MAXIMUM_WINDOW_MILLIS = 1.0
         const val MAXIMUM_WINDOW_MILLIS = 1_000.0
         val DEFAULT = JudgementConfiguration()

@@ -12,6 +12,7 @@ class JudgementConfigurationRepositoryTest {
         assertEquals(40.0, defaults.onTimeAfterMillis, 0.0)
         assertEquals(120.0, defaults.maximumEarlyMillis, 0.0)
         assertEquals(120.0, defaults.maximumLateMillis, 0.0)
+        assertEquals(0.30, defaults.minimumHitRateForVerdict, 0.0)
     }
 
     @Test
@@ -24,6 +25,7 @@ class JudgementConfigurationRepositoryTest {
             maximumEarlyMillis = 90.0,
             maximumLateMillis = 180.0,
             minimumDetectedHitConfidence = 0.45,
+            minimumHitRateForVerdict = 0.55,
             extraHitHandlingEnabled = false,
         )
 
@@ -55,22 +57,36 @@ class JudgementConfigurationRepositoryTest {
         assertThrows(IllegalArgumentException::class.java) {
             JudgementConfiguration(minimumDetectedHitConfidence = 1.1)
         }
+        assertThrows(IllegalArgumentException::class.java) {
+            JudgementConfiguration(minimumHitRateForVerdict = -0.01)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            JudgementConfiguration(minimumHitRateForVerdict = 1.01)
+        }
     }
 
     @Test
     fun snapshotsRemainFrozenWhileNewLoadsReceiveUpdatedSettings() {
         val store = FakeStore()
         val repository = JudgementConfigurationRepository(store)
-        val first = JudgementConfiguration.DEFAULT.copy(onTimeBeforeMillis = 25.0)
+        val first = JudgementConfiguration.DEFAULT.copy(
+            onTimeBeforeMillis = 25.0,
+            minimumHitRateForVerdict = 0.35,
+        )
         repository.save(first)
         val activeSession = SessionJudgementSnapshot(repository.load())
 
-        val updated = first.copy(onTimeBeforeMillis = 35.0)
+        val updated = first.copy(
+            onTimeBeforeMillis = 35.0,
+            minimumHitRateForVerdict = 0.65,
+        )
         repository.save(updated)
         val newSession = SessionJudgementSnapshot(repository.load())
 
         assertEquals(25.0, activeSession.configuration.onTimeBeforeMillis, 0.0)
         assertEquals(35.0, newSession.configuration.onTimeBeforeMillis, 0.0)
+        assertEquals(0.35, activeSession.configuration.minimumHitRateForVerdict, 0.0)
+        assertEquals(0.65, newSession.configuration.minimumHitRateForVerdict, 0.0)
         assertEquals(JudgementConfiguration.CURRENT_VERSION, activeSession.version)
     }
 

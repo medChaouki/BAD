@@ -10,6 +10,14 @@ import org.junit.Test
 
 class AppUiStateTest {
     @Test
+    fun processingIsDedicatedDestinationAndBackIsDisabled() {
+        val processing = AppUiState().openProcessing()
+
+        assertEquals(AppDestination.PROCESSING, processing.destination)
+        assertEquals(processing, processing.navigateBack())
+    }
+
+    @Test
     fun debugResultsAreHiddenByDefaultAndBackReturnsToResultsSummary() {
         val state = AppUiState(
             destination = AppDestination.RESULTS,

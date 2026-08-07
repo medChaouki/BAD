@@ -10,6 +10,7 @@ enum class AppDestination {
     EXERCISE_EDITOR,
     SETTINGS,
     TIMING_CALIBRATION,
+    PROCESSING,
     RESULTS,
 }
 
@@ -95,6 +96,14 @@ internal fun AppUiState.openResults(
     resultsDebugVisible = false,
 )
 
+internal fun AppUiState.openProcessing(): AppUiState = copy(
+    destination = AppDestination.PROCESSING,
+    practiceResult = null,
+    productionGraph = null,
+    resultsDetailVisible = false,
+    resultsDebugVisible = false,
+)
+
 internal fun AppUiState.navigateBack(): AppUiState = when (destination) {
     AppDestination.PRACTICE -> this
     AppDestination.EXERCISE_LIBRARY -> copy(destination = AppDestination.PRACTICE)
@@ -105,6 +114,7 @@ internal fun AppUiState.navigateBack(): AppUiState = when (destination) {
     AppDestination.SETTINGS,
     AppDestination.TIMING_CALIBRATION,
     -> copy(destination = AppDestination.PRACTICE)
+    AppDestination.PROCESSING -> this
     AppDestination.RESULTS -> if (resultsDetailVisible) {
         copy(resultsDetailVisible = false)
     } else if (resultsDebugVisible) {

@@ -100,7 +100,7 @@ fun PracticeRoute(
     onDocumentLoadConsumed: () -> Unit,
     fileOperationsEnabled: Boolean,
     onOpenSettings: () -> Unit,
-    onResultsReady: (PracticeResult, ProductionGraphModel) -> Unit,
+    onProcessingStarted: () -> Unit,
     viewModel: PracticeViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -162,9 +162,8 @@ fun PracticeRoute(
         }
     }
 
-    LaunchedEffect(uiState.practiceResult) {
-        val ready = uiState.practiceResult as? PracticeResultState.Ready
-        if (ready != null) onResultsReady(ready.result, ready.graphModel)
+    LaunchedEffect(uiState.phase) {
+        if (uiState.phase == PracticePhase.PROCESSING) onProcessingStarted()
     }
 
     DisposableEffect(lifecycleOwner, viewModel) {
@@ -1572,6 +1571,7 @@ private fun sessionStatusText(uiState: PracticeUiState): String = when (uiState.
     PracticePhase.PAUSED -> "Inspection paused."
     PracticePhase.RESUME_COUNT_IN -> "Count-in: ${uiState.countInBeatsRemaining}"
     PracticePhase.COMPLETED -> "Inspection complete."
+    PracticePhase.PROCESSING -> "Processing inspection."
     PracticePhase.ERROR -> "Rhythm subsystem objected."
     PracticePhase.UNLOADED -> "No exercise loaded."
     PracticePhase.LOADING -> "Loading exercise…"
@@ -1584,6 +1584,7 @@ private fun PracticePhase.isPlayerVisible(): Boolean = this in setOf(
     PracticePhase.PAUSED,
     PracticePhase.RESUME_COUNT_IN,
     PracticePhase.COMPLETED,
+    PracticePhase.PROCESSING,
 )
 
 private const val NOTE_RADIUS_PX = 11f

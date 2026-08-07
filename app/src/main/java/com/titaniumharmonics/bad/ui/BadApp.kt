@@ -12,6 +12,7 @@ import com.titaniumharmonics.bad.ui.practice.PracticeRoute
 import com.titaniumharmonics.bad.ui.practice.PracticeViewModel
 import com.titaniumharmonics.bad.ui.practice.DebugAnalysisRoute
 import com.titaniumharmonics.bad.ui.results.ResultsScreen
+import com.titaniumharmonics.bad.ui.processing.ProcessingRoute
 import com.titaniumharmonics.bad.ui.calibration.TimingCalibrationRoute
 import com.titaniumharmonics.bad.ui.settings.SettingsRoute
 import com.titaniumharmonics.bad.BuildConfig
@@ -43,7 +44,7 @@ fun BadApp(
                 onDocumentLoadConsumed = viewModel::consumePracticeDocumentToLoad,
                 fileOperationsEnabled = uiState.storageInitializationComplete,
                 onOpenSettings = viewModel::openSettings,
-                onResultsReady = viewModel::openResults,
+                onProcessingStarted = viewModel::openProcessing,
                 viewModel = practiceViewModel,
             )
         }
@@ -74,6 +75,21 @@ fun BadApp(
             TimingCalibrationRoute(
                 onNavigateBack = viewModel::navigateBack,
                 onCalibrationChanged = viewModel::timingCalibrationChanged,
+            )
+        }
+        AppDestination.PROCESSING -> {
+            val processingUiState by practiceViewModel.uiState.collectAsStateWithLifecycle()
+            ProcessingRoute(
+                uiState = processingUiState,
+                onResultsReady = viewModel::openResults,
+                onRetry = {
+                    if (processingUiState.recordedSession == null) {
+                        practiceViewModel.prepareForNextRun()
+                        viewModel.leaveResultsForPractice()
+                    } else {
+                        practiceViewModel.retryProcessing()
+                    }
+                },
             )
         }
         AppDestination.RESULTS -> {
