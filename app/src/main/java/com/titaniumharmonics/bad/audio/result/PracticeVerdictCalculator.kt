@@ -7,6 +7,7 @@ enum class PracticeVerdict {
     ON_TIME,
     LATE,
     MISSING,
+    CREATIVE,
 }
 
 /** Pure high-level summary of a completed run using only its frozen judgement settings. */
@@ -24,6 +25,9 @@ object PracticeVerdictCalculator {
         }
 
         val bias = result.signedMeanTimingErrorMillis ?: return PracticeVerdict.MISSING
+        if (result.extraHitRate > configuration.minimumExtraHitRateForCreativeVerdict) {
+            return PracticeVerdict.CREATIVE
+        }
         return when {
             bias < -configuration.onTimeBeforeMillis -> PracticeVerdict.EARLY
             bias > configuration.onTimeAfterMillis -> PracticeVerdict.LATE

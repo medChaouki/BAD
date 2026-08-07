@@ -6,7 +6,7 @@
 
 B.A.D. is an Android drum-practice app. It records a player performing a
 rhythmic exercise, detects drum hits, compares them with the expected notes,
-and reports whether the playing was early, on time, late, or missing.
+and reports whether the playing was early, on time, late, missing, or creative.
 
 ## Current state
 
@@ -42,10 +42,9 @@ locally on the device. No account or network service is required.
 After recording finishes, a dedicated black processing screen follows the real
 analysis pipeline:
 
-1. **YOU HAVE BEEN WEIGHED** — WAV finalization and audio preprocessing.
-2. **YOU HAVE BEEN MEASURED** — hit detection, matching, result assembly, and
-   statistics.
-3. **AND YOU HAVE BEEN FOUND...** — `EARLY`, `ON TIME`, `LATE`, or `MISSING`.
+1. **YOU HAVE BEEN WEIGHED**
+2. **YOU HAVE BEEN MEASURED**
+3. **AND YOU HAVE BEEN FOUND...**
 
 The first two messages remain visible for at least 1.5 seconds each and may
 remain longer when processing is still running. Large dots animate below the
@@ -57,15 +56,20 @@ judgement configuration:
 
 ```text
 hit rate below minimumHitRateForVerdict → MISSING
+extra-hit rate above Creative threshold → CREATIVE
 mean bias before the On-Time window     → EARLY
 mean bias after the On-Time window      → LATE
 otherwise                               → ON TIME
 ```
 
-`minimumHitRateForVerdict` defaults to 30% and is configurable from 0% to 100%
-in Settings. `MISSING` prevents misleading timing feedback when too few notes
-were matched. The verdict is not a score; it is a high-level summary of the
-player's overall timing tendency.
+`minimumHitRateForVerdict` and
+`minimumExtraHitRateForCreativeVerdict` both default to 30% and are configurable
+from 0% to 100% in Settings. `MISSING` takes priority over `CREATIVE`, preventing
+misleading feedback when too few expected notes were matched. The Creative
+threshold is strict: exactly 30% extra hits is not Creative. The verdict is not
+a score; it is a high-level summary of the player's performance tendency. The
+extra-hit rate is the existing result statistic: extra hits divided by all
+accepted detected hits.
 
 ## Requirements
 

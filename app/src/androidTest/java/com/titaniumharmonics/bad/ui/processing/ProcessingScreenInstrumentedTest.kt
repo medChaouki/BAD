@@ -46,4 +46,17 @@ class ProcessingScreenInstrumentedTest {
         composeRule.onNodeWithText("YOU HAVE BEEN MEASURED", substring = true)
             .assertDoesNotExist()
     }
+
+    @Test
+    fun creativeVerdictIsDisplayed() {
+        composeRule.setContent {
+            BADTheme {
+                ProcessingScreen(
+                    ProcessingPresentation(ProcessingStage.VERDICT, PracticeVerdict.CREATIVE),
+                    onRetry = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("CREATIVE").assertExists()
+    }
 }

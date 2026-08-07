@@ -71,6 +71,7 @@ enum PracticeVerdict {
   ON_TIME
   LATE
   MISSING
+  CREATIVE
 }
 
 class SessionMetronomeSnapshot {
@@ -97,6 +98,7 @@ class JudgementConfiguration {
   +maximumLateMillis: Double
   +minimumDetectedHitConfidence: Double
   +minimumHitRateForVerdict: Double
+  +minimumExtraHitRateForCreativeVerdict: Double
 }
 
 class PracticeResultAssembler <<object>> {
@@ -129,7 +131,7 @@ SessionDetectionSnapshot o-- TimingCalibration
 SessionJudgementSnapshot *-- JudgementConfiguration
 
 PracticeResultAssembler ..> PracticeResult : creates
-PracticeVerdictCalculator ..> PracticeResult : reads hit rate and signed mean bias
+PracticeVerdictCalculator ..> PracticeResult : reads hit rate, extra-hit rate, and signed mean bias
 PracticeVerdictCalculator ..> SessionJudgementSnapshot : reads frozen thresholds
 PracticeVerdictCalculator ..> PracticeVerdict : returns
 PracticeResultReady *-- PracticeResult

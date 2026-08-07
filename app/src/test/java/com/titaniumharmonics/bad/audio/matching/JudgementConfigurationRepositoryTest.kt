@@ -13,6 +13,7 @@ class JudgementConfigurationRepositoryTest {
         assertEquals(120.0, defaults.maximumEarlyMillis, 0.0)
         assertEquals(120.0, defaults.maximumLateMillis, 0.0)
         assertEquals(0.30, defaults.minimumHitRateForVerdict, 0.0)
+        assertEquals(0.30, defaults.minimumExtraHitRateForCreativeVerdict, 0.0)
     }
 
     @Test
@@ -26,6 +27,7 @@ class JudgementConfigurationRepositoryTest {
             maximumLateMillis = 180.0,
             minimumDetectedHitConfidence = 0.45,
             minimumHitRateForVerdict = 0.55,
+            minimumExtraHitRateForCreativeVerdict = 0.45,
             extraHitHandlingEnabled = false,
         )
 
@@ -47,6 +49,24 @@ class JudgementConfigurationRepositoryTest {
     }
 
     @Test
+    fun versionTwoSettingsMigrateWithDefaultCreativeThreshold() {
+        val store = FakeStore()
+        val repository = JudgementConfigurationRepository(store)
+        store.values = JudgementConfigurationCodec.encode(
+            JudgementConfiguration.DEFAULT.copy(minimumHitRateForVerdict = 0.45),
+        ).toMutableMap().apply {
+            this["version"] = 2
+            remove("minimum_extra_hit_rate_for_creative_verdict")
+        }
+
+        val migrated = repository.load()
+
+        assertEquals(0.45, migrated.minimumHitRateForVerdict, 0.0)
+        assertEquals(0.30, migrated.minimumExtraHitRateForCreativeVerdict, 0.0)
+        assertEquals(JudgementConfiguration.CURRENT_VERSION, migrated.version)
+    }
+
+    @Test
     fun validationRejectsZeroMaximumWindowsAndInvalidConfidence() {
         assertThrows(IllegalArgumentException::class.java) {
             JudgementConfiguration(
@@ -63,6 +83,12 @@ class JudgementConfigurationRepositoryTest {
         assertThrows(IllegalArgumentException::class.java) {
             JudgementConfiguration(minimumHitRateForVerdict = 1.01)
         }
+        assertThrows(IllegalArgumentException::class.java) {
+            JudgementConfiguration(minimumExtraHitRateForCreativeVerdict = -0.01)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            JudgementConfiguration(minimumExtraHitRateForCreativeVerdict = 1.01)
+        }
     }
 
     @Test
@@ -72,6 +98,7 @@ class JudgementConfigurationRepositoryTest {
         val first = JudgementConfiguration.DEFAULT.copy(
             onTimeBeforeMillis = 25.0,
             minimumHitRateForVerdict = 0.35,
+            minimumExtraHitRateForCreativeVerdict = 0.25,
         )
         repository.save(first)
         val activeSession = SessionJudgementSnapshot(repository.load())
@@ -79,6 +106,7 @@ class JudgementConfigurationRepositoryTest {
         val updated = first.copy(
             onTimeBeforeMillis = 35.0,
             minimumHitRateForVerdict = 0.65,
+            minimumExtraHitRateForCreativeVerdict = 0.55,
         )
         repository.save(updated)
         val newSession = SessionJudgementSnapshot(repository.load())
@@ -87,6 +115,16 @@ class JudgementConfigurationRepositoryTest {
         assertEquals(35.0, newSession.configuration.onTimeBeforeMillis, 0.0)
         assertEquals(0.35, activeSession.configuration.minimumHitRateForVerdict, 0.0)
         assertEquals(0.65, newSession.configuration.minimumHitRateForVerdict, 0.0)
+        assertEquals(
+            0.25,
+            activeSession.configuration.minimumExtraHitRateForCreativeVerdict,
+            0.0,
+        )
+        assertEquals(
+            0.55,
+            newSession.configuration.minimumExtraHitRateForCreativeVerdict,
+            0.0,
+        )
         assertEquals(JudgementConfiguration.CURRENT_VERSION, activeSession.version)
     }
 

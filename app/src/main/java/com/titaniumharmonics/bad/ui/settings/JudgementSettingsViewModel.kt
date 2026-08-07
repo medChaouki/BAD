@@ -20,6 +20,7 @@ interface JudgementSettingsActions {
     fun setMaximumLate(value: Double)
     fun setMinimumConfidence(value: Double)
     fun setMinimumHitRateForVerdict(value: Double)
+    fun setMinimumExtraHitRateForCreativeVerdict(value: Double)
     fun setExtraHitHandlingEnabled(value: Boolean)
     fun reset()
 }
@@ -72,6 +73,10 @@ class JudgementSettingsViewModel(application: Application) :
 
     override fun setMinimumHitRateForVerdict(value: Double) = update { current ->
         current.copy(minimumHitRateForVerdict = value.validConfidence())
+    }
+
+    override fun setMinimumExtraHitRateForCreativeVerdict(value: Double) = update { current ->
+        current.copy(minimumExtraHitRateForCreativeVerdict = value.validConfidence())
     }
 
     override fun setExtraHitHandlingEnabled(value: Boolean) = update { current ->

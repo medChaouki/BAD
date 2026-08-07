@@ -60,7 +60,7 @@ Processor --> PracticeVM : Success(result, graph)
 deactivate Processor
 
 PracticeVM -> VerdictCalculator : calculate(result, frozen judgement snapshot)
-VerdictCalculator --> PracticeVM : EARLY / ON_TIME / LATE / MISSING
+VerdictCalculator --> PracticeVM : EARLY / ON_TIME / LATE / MISSING / CREATIVE
 PracticeVM -> PracticeVM : PracticeResultState.Ready + verdict
 ProcessingRoute -> Player : AND YOU HAVE BEEN FOUND...\n<VERDICT>
 

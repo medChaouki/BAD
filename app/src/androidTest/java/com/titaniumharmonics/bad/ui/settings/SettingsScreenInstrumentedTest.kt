@@ -85,6 +85,7 @@ class SettingsScreenInstrumentedTest {
             "Maximum Late",
             "Minimum detected-hit confidence",
             "Minimum hit rate for verdict",
+            "Extra-hit rate for Creative verdict",
             "Extra-hit handling enabled",
         ).forEach { label ->
             composeRule.onNodeWithText(label).assertExists()
@@ -112,6 +113,7 @@ private object TestJudgementActions : JudgementSettingsActions {
     override fun setMaximumLate(value: Double) = Unit
     override fun setMinimumConfidence(value: Double) = Unit
     override fun setMinimumHitRateForVerdict(value: Double) = Unit
+    override fun setMinimumExtraHitRateForCreativeVerdict(value: Double) = Unit
     override fun setExtraHitHandlingEnabled(value: Boolean) = Unit
     override fun reset() {
         resetClicked = true

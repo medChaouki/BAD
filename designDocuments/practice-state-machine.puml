@@ -65,6 +65,7 @@ note right of PROCESSING
 end note
 
 note bottom of VERDICT
+  EARLY, ON_TIME, LATE, MISSING, or CREATIVE.
   Verdict is visible for 900 ms.
 end note
 @enduml

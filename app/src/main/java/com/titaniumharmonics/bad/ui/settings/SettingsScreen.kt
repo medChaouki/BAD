@@ -214,6 +214,15 @@ private fun JudgementSettingsCard(
                 { actions.setMinimumHitRateForVerdict(it / 100.0) },
                 "%",
             )
+            DecimalStepper(
+                "Extra-hit rate for Creative verdict",
+                configuration.minimumExtraHitRateForCreativeVerdict * 100.0,
+                5.0,
+                0.0,
+                100.0,
+                { actions.setMinimumExtraHitRateForCreativeVerdict(it / 100.0) },
+                "%",
+            )
             LabelledSwitch(
                 "Extra-hit handling enabled",
                 configuration.extraHitHandlingEnabled,

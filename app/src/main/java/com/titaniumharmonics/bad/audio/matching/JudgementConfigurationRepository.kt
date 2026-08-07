@@ -30,6 +30,8 @@ object JudgementConfigurationCodec {
         "maximum_late_ms" to value.maximumLateMillis.toString(),
         "minimum_confidence" to value.minimumDetectedHitConfidence.toString(),
         "minimum_hit_rate_for_verdict" to value.minimumHitRateForVerdict.toString(),
+        "minimum_extra_hit_rate_for_creative_verdict" to
+            value.minimumExtraHitRateForCreativeVerdict.toString(),
         "extra_hit_handling_enabled" to value.extraHitHandlingEnabled,
     )
 
@@ -49,6 +51,11 @@ object JudgementConfigurationCodec {
                 values.double("minimum_hit_rate_for_verdict")
             } else {
                 JudgementConfiguration.DEFAULT_MINIMUM_HIT_RATE_FOR_VERDICT
+            },
+            minimumExtraHitRateForCreativeVerdict = if (version >= 3) {
+                values.double("minimum_extra_hit_rate_for_creative_verdict")
+            } else {
+                JudgementConfiguration.DEFAULT_MINIMUM_EXTRA_HIT_RATE_FOR_CREATIVE_VERDICT
             },
             extraHitHandlingEnabled = values.boolean("extra_hit_handling_enabled"),
             version = JudgementConfiguration.CURRENT_VERSION,

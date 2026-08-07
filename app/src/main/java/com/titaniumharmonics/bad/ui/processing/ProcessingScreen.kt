@@ -214,6 +214,7 @@ private fun PracticeVerdict?.displayText(): String = when (this) {
     PracticeVerdict.ON_TIME -> "ON TIME"
     PracticeVerdict.LATE -> "LATE"
     PracticeVerdict.MISSING -> "MISSING"
+    PracticeVerdict.CREATIVE -> "CREATIVE"
     null -> ""
 }
 

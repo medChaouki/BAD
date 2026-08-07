@@ -48,14 +48,39 @@ class PracticeVerdictCalculatorTest {
         assertEquals(PracticeVerdict.MISSING, calculate(lowHitResult, minimumHitRate = 0.8))
     }
 
+    @Test
+    fun extraHitRateAboveThresholdIsCreativeButExactBoundaryIsNot() {
+        assertEquals(
+            PracticeVerdict.CREATIVE,
+            calculate(result(bias = 0.0, extraHitRate = 0.300001)),
+        )
+        assertEquals(
+            PracticeVerdict.ON_TIME,
+            calculate(result(bias = 0.0, extraHitRate = 0.30)),
+        )
+    }
+
+    @Test
+    fun missingTakesPriorityOverCreative() {
+        assertEquals(
+            PracticeVerdict.MISSING,
+            calculate(
+                result(bias = 500.0, extraHitRate = 1.0),
+                minimumHitRate = 0.8,
+            ),
+        )
+    }
+
     private fun calculate(
         result: PracticeResult,
         minimumHitRate: Double = 0.30,
+        minimumCreativeExtraHitRate: Double = 0.30,
     ): PracticeVerdict = PracticeVerdictCalculator.calculate(
         result,
         SessionJudgementSnapshot(
             JudgementConfiguration.DEFAULT.copy(
                 minimumHitRateForVerdict = minimumHitRate,
+                minimumExtraHitRateForCreativeVerdict = minimumCreativeExtraHitRate,
             ),
         ),
     )
@@ -64,6 +89,7 @@ class PracticeVerdictCalculatorTest {
         bias: Double?,
         empty: Boolean = false,
         missedOnly: Boolean = false,
+        extraHitRate: Double = 0.0,
     ): PracticeResult {
         val notes = when {
             empty -> emptyList()
@@ -98,7 +124,7 @@ class PracticeVerdictCalculatorTest {
             medianAbsoluteTimingErrorMillis = bias?.let(::abs),
             timingErrorStandardDeviationMillis = bias?.let { 0.0 },
             missedRate = if (total == 0) 0.0 else missed.toDouble() / total,
-            extraHitRate = 0.0,
+            extraHitRate = extraHitRate,
             meanRelativeIntensity = null,
             minimumRelativeIntensity = null,
             maximumRelativeIntensity = null,
