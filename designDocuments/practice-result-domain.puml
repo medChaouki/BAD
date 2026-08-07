@@ -1,0 +1,147 @@
+@startuml Practice_Result_Domain
+title B.A.D. - Practice Result Domain Model
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty methods
+
+class PracticeResult {
+  +schemaVersion: Int
+  +exerciseId: String
+  +exerciseName: String
+  +bpm: Double
+  +sampleRateHz: Int
+  +totalExpectedNotes: Int
+  +earlyCount: Int
+  +onTimeCount: Int
+  +lateCount: Int
+  +missedCount: Int
+  +extraCount: Int
+  +accuracy: Double
+  +hitRate: Double
+  +signedMeanTimingErrorMillis: Double?
+  +meanAbsoluteTimingErrorMillis: Double?
+  +medianAbsoluteTimingErrorMillis: Double?
+  +timingErrorStandardDeviationMillis: Double?
+}
+
+class JudgedNote {
+  +expectedNoteIndex: Int
+  +expectedExerciseSample: Long
+  +matchedHit: DetectedHit?
+  +timingErrorSamples: Long?
+  +timingErrorMillis: Double?
+  +judgement: HitJudgement
+  +detectionConfidence: Double?
+  +relativeIntensity: Double?
+  +accent: Boolean
+}
+
+class ExtraHit {
+  +detectedHitIndex: Int
+  +detectedHit: DetectedHit
+  +calibratedSample: Long
+  +calibratedTimeMillis: Double
+  +relativeIntensity: Double
+  +confidence: Double
+}
+
+class DetectedHit {
+  +rawExerciseSample: Long
+  +calibratedExerciseSample: Long
+  +peakAmplitude: Float
+  +confidence: Double
+  +calibrationApplied: Boolean
+}
+
+class RuntimeExercise
+class ProductionGraphModel
+class TimingCalibration
+
+enum HitJudgement {
+  EARLY
+  ON_TIME
+  LATE
+  MISSED
+}
+
+enum PracticeVerdict {
+  EARLY
+  ON_TIME
+  LATE
+  MISSING
+}
+
+class SessionMetronomeSnapshot {
+  +configuration: MetronomeConfiguration
+  +downbeatsOnly: Boolean
+}
+
+class SessionDetectionSnapshot {
+  +configuration: HitDetectionConfiguration
+  +timingCalibration: TimingCalibration?
+}
+
+class SessionJudgementSnapshot {
+  +configuration: JudgementConfiguration
+  +version: Int
+}
+
+class MetronomeConfiguration
+class HitDetectionConfiguration
+class JudgementConfiguration {
+  +onTimeBeforeMillis: Double
+  +onTimeAfterMillis: Double
+  +maximumEarlyMillis: Double
+  +maximumLateMillis: Double
+  +minimumDetectedHitConfidence: Double
+  +minimumHitRateForVerdict: Double
+}
+
+class PracticeResultAssembler <<object>> {
+  +assemble(...): PracticeResult
+}
+
+class PracticeVerdictCalculator <<object>> {
+  +calculate(result, snapshot): PracticeVerdict
+}
+
+class PracticeResultReady <<PracticeResultState.Ready>> {
+  +result: PracticeResult
+  +graphModel: ProductionGraphModel
+}
+
+PracticeResult "1" *-- "0..*" JudgedNote
+PracticeResult "1" *-- "0..*" ExtraHit
+PracticeResult "1" *-- "1" RuntimeExercise
+PracticeResult "1" *-- "1" SessionMetronomeSnapshot
+PracticeResult "1" *-- "1" SessionDetectionSnapshot
+PracticeResult "1" *-- "1" SessionJudgementSnapshot
+PracticeResult "1" o-- "0..1" TimingCalibration
+JudgedNote "0..*" --> "0..1" DetectedHit
+ExtraHit "0..*" --> "1" DetectedHit
+JudgedNote --> HitJudgement
+
+SessionMetronomeSnapshot *-- MetronomeConfiguration
+SessionDetectionSnapshot *-- HitDetectionConfiguration
+SessionDetectionSnapshot o-- TimingCalibration
+SessionJudgementSnapshot *-- JudgementConfiguration
+
+PracticeResultAssembler ..> PracticeResult : creates
+PracticeVerdictCalculator ..> PracticeResult : reads hit rate and signed mean bias
+PracticeVerdictCalculator ..> SessionJudgementSnapshot : reads frozen thresholds
+PracticeVerdictCalculator ..> PracticeVerdict : returns
+PracticeResultReady *-- PracticeResult
+PracticeResultReady *-- ProductionGraphModel
+
+note right of PracticeVerdict
+  High-level timing tendency,
+  not the user's score.
+end note
+
+note bottom of SessionJudgementSnapshot
+  Settings changes after session start
+  cannot change the completed verdict.
+end note
+@enduml

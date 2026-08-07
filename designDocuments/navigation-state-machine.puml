@@ -1,0 +1,56 @@
+@startuml Navigation_State_Machine
+title B.A.D. - App Navigation State Machine
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+hide empty description
+
+state Startup <<choice>>
+[*] --> Startup
+Startup --> TIMING_CALIBRATION : no active calibration
+Startup --> PRACTICE : active calibration exists
+
+PRACTICE --> EXERCISE_LIBRARY : load exercise
+PRACTICE --> EXERCISE_LIBRARY : modify exercise
+PRACTICE --> EXERCISE_EDITOR : create exercise
+PRACTICE --> SETTINGS : settings
+PRACTICE --> PROCESSING : natural exercise completion
+
+EXERCISE_LIBRARY --> PRACTICE : choose exercise for practice
+EXERCISE_LIBRARY --> EXERCISE_EDITOR : choose exercise to modify
+EXERCISE_LIBRARY --> PRACTICE : back
+
+EXERCISE_EDITOR --> PRACTICE : back after create
+EXERCISE_EDITOR --> EXERCISE_LIBRARY : back after library edit
+EXERCISE_EDITOR --> PRACTICE : play saved exercise
+
+SETTINGS --> TIMING_CALIBRATION : calibrate / recalibrate
+SETTINGS --> PRACTICE : back
+TIMING_CALIBRATION --> PRACTICE : accept, reject, or back
+
+PROCESSING --> RESULTS : complete result + verdict delay
+PROCESSING --> PROCESSING : system back ignored
+PROCESSING --> PRACTICE : unrecoverable finalization failure + tap
+
+state RESULTS {
+  [*] --> SUMMARY
+  SUMMARY --> DETAILS : Detailed results
+  DETAILS --> SUMMARY : back
+  SUMMARY --> DEBUG_ANALYSIS : Open debug analysis [debug build]
+  DEBUG_ANALYSIS --> SUMMARY : back
+}
+
+RESULTS --> PRACTICE : back / Practice
+RESULTS --> PRACTICE : Retry (new recording)
+RESULTS --> EXERCISE_LIBRARY : Exercise library
+
+note right of PROCESSING
+  Dedicated destination.
+  AppUiState.navigateBack() returns the same state.
+end note
+
+note right of RESULTS
+  PracticeResult and ProductionGraphModel
+  are held by AppUiState while Results is open.
+end note
+@enduml

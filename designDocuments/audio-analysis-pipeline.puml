@@ -1,0 +1,73 @@
+@startuml Audio_Analysis_Pipeline
+title B.A.D. - Offline Audio Analysis and Result Pipeline
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+
+start
+:Finalize mono PCM WAV;
+:Create RecordedSession with\nRuntimeExercise and frozen snapshots;
+
+partition "Stage 1 - WEIGHING" {
+  :Read RIFF/WAVE with WavPcm16Reader;
+  if (WAV and session metadata valid?) then (yes)
+    :Extract graded exercise range;
+    :Normalize PCM;
+    :Remove mean DC offset;
+    :Apply high-pass filter;
+    :Apply frozen metronome notch filter;
+    :Calculate overlapping frame metrics;
+    :Calculate transient envelope;
+    :Estimate adaptive noise floor;
+    :Create immutable AudioAnalysis;
+  else (no)
+    :AudioAnalysisState.Failed;
+    stop
+  endif
+}
+
+partition "Stage 2 - MEASURING" {
+  :Build expected sample timeline;
+  :Apply adaptive onset threshold and hysteresis;
+  :Analyze candidate-local spectra with FFT;
+  :Classify drum vs metronome candidates;
+  :Apply retrigger spacing and confidence rules;
+  :Apply frozen timing calibration;
+  :Create HitDetectionResult;
+
+  if (session snapshots and timeline agree?) then (yes)
+    :Filter hits using frozen confidence threshold;
+    :Match hits to expected notes\nwith deterministic sequence alignment;
+    :Classify EARLY / ON_TIME / LATE / MISSED;
+    :Assemble immutable PracticeResult\nand existing timing statistics;
+    :Build bounded ProductionGraphModel;
+  else (no)
+    :PracticeResultState.Failed;
+    stop
+  endif
+}
+
+partition "Stage 3 - VERDICT" {
+  if (zero expected notes or hit rate below\nfrozen minimumHitRateForVerdict?) then (yes)
+    :MISSING;
+  else (no)
+    if (signed mean bias < -onTimeBefore?) then (yes)
+      :EARLY;
+    elseif (signed mean bias > onTimeAfter?) then (yes)
+      :LATE;
+    else
+      :ON_TIME;
+    endif
+  endif
+}
+
+:Show verdict for 900 ms;
+:Navigate automatically to Results;
+note right
+  Audio processing, hit detection, matching,
+  judgement classification, and statistics
+  remain authoritative domain components.
+  The processing UI only observes their state.
+end note
+stop
+@enduml
