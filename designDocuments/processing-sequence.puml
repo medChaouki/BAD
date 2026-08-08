@@ -1,0 +1,87 @@
+@startuml Processing_Sequence
+title B.A.D. - Practice Completion and Processing Sequence
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+autonumber
+
+actor Player
+participant PracticeRoute
+participant PracticeViewModel as PracticeVM
+participant AppViewModel as AppVM
+participant ProcessingRoute
+participant PracticeRecordingCoordinator as Coordinator
+participant AudioRecordWavSessionRecorder as Recorder
+participant OfflineAudioAnalyzer as Analyzer
+participant OfflineDrumHitDetector as Detector
+participant PracticeResultProcessor as Processor
+participant HitMatcher as Matcher
+participant PracticeResultAssembler as Assembler
+participant ProductionGraphModelBuilder as GraphBuilder
+participant PracticeVerdictCalculator as VerdictCalculator
+participant ResultsScreen
+
+Player -> PracticeVM : completes exercise
+PracticeVM -> PracticeVM : phase = PROCESSING
+PracticeRoute -> AppVM : openProcessing()
+AppVM -> ProcessingRoute : destination = PROCESSING
+ProcessingRoute -> Player : YOU HAVE BEEN WEIGHED\nlarge animated dots (225 ms)
+
+PracticeVM -> Coordinator : completeSession()
+Coordinator -> Recorder : finish()
+Recorder --> Coordinator : FinalizedRecording
+Coordinator --> PracticeVM : RecordedSession + frozen snapshots
+
+PracticeVM -> Analyzer : analyze(RecordedSession)
+activate Analyzer
+Analyzer -> Analyzer : validate WAV and graded range
+Analyzer -> Analyzer : normalize, filter, frame, envelope, noise floor
+Analyzer --> PracticeVM : AudioAnalysis
+deactivate Analyzer
+
+PracticeVM -> PracticeVM : AudioAnalysisState.Ready
+ProcessingRoute -> Player : YOU HAVE BEEN MEASURED\nlarge animated dots (225 ms)
+
+PracticeVM -> Detector : detect(AudioAnalysis, SessionDetectionSnapshot)
+activate Detector
+Detector --> PracticeVM : HitDetectionResult
+deactivate Detector
+
+PracticeVM -> Processor : process(session, analysis, detection)
+activate Processor
+Processor -> Processor : validate session snapshots and timeline
+Processor -> Matcher : match(expected notes, detected hits, frozen judgement config)
+Matcher --> Processor : HitMatchingResult
+Processor -> Assembler : assemble(...)
+Assembler --> Processor : PracticeResult
+Processor -> GraphBuilder : build(result, analysis)
+GraphBuilder --> Processor : ProductionGraphModel
+Processor --> PracticeVM : Success(result, graph)
+deactivate Processor
+
+PracticeVM -> VerdictCalculator : calculate(result, frozen judgement snapshot)
+VerdictCalculator --> PracticeVM : EARLY / ON_TIME / LATE / MISSING / CREATIVE
+PracticeVM -> PracticeVM : PracticeResultState.Ready + verdict
+ProcessingRoute -> Player : AND YOU HAVE BEEN FOUND...\n<VERDICT>
+
+... 900 ms ...
+ProcessingRoute -> AppVM : openResults(result, graph)
+AppVM -> ResultsScreen : destination = RESULTS
+ResultsScreen -> Player : summary, statistics, graph, details
+
+== Alternative failure and retry path ==
+PracticeVM -> ProcessingRoute : Failed(message)
+ProcessingRoute -> Player : PROCESSING FAILED / TAP TO RETRY
+Player -> ProcessingRoute : tap
+ProcessingRoute -> PracticeVM : retryProcessing()
+note over PracticeVM
+  Reuse valid analysis and detection when possible;
+  otherwise restart preprocessing.
+end note
+
+note over ProcessingRoute
+  WEIGHING and MEASURING advance only after
+  real pipeline completion and at least 1.5 s display.
+  Back navigation is disabled.
+end note
+@enduml

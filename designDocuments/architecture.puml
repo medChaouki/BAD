@@ -1,0 +1,138 @@
+@startuml B_A_D_Architecture
+title B.A.D. - Current Application Architecture
+
+skinparam backgroundColor #FFFFFF
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor Player
+
+package "Compose UI" {
+  [BadApp] as BadApp
+  [PracticeRoute / PracticeScreen] as PracticeUI
+  [ProcessingRoute / ProcessingScreen] as ProcessingUI
+  [ResultsScreen] as ResultsUI
+  [SettingsRoute] as SettingsUI
+  [Exercise Library / Editor] as ExerciseUI
+  [TimingCalibrationRoute] as CalibrationUI
+}
+
+package "UI State" {
+  [AppViewModel] as AppVM
+  [PracticeViewModel] as PracticeVM
+  [Settings ViewModels] as SettingsVM
+  [AppUiState] as AppState
+  [PracticeUiState] as PracticeState
+}
+
+package "Exercise and Timing" {
+  [ExerciseDocumentStore] as DocumentStore
+  [ExerciseCompiler] as Compiler
+  [RuntimeExercise] as RuntimeExercise
+  [ExerciseTiming] as ExerciseTiming
+  [SessionElapsedClock] as SessionClock
+}
+
+package "Recording and Playback" {
+  [PracticeRecordingCoordinator] as RecordingCoordinator
+  [AudioRecordWavSessionRecorder] as Recorder
+  [AudioTrackMetronome] as Metronome
+  [RecordedSession] as RecordedSession
+}
+
+package "Offline Analysis" {
+  [OfflineAudioAnalyzer] as Analyzer
+  [OfflineDrumHitDetector] as Detector
+  [PracticeResultProcessor] as ResultProcessor
+  [HitMatcher] as Matcher
+  [PracticeResultAssembler] as Assembler
+  [ProductionGraphModelBuilder] as GraphBuilder
+  [PracticeVerdictCalculator] as VerdictCalculator
+}
+
+package "Configuration" {
+  [MetronomeConfigurationRepository] as MetronomeRepo
+  [HitDetectionConfigurationRepository] as DetectionRepo
+  [JudgementConfigurationRepository] as JudgementRepo
+  [TimingCalibrationRepository] as CalibrationRepo
+  database "SharedPreferences stores" as Preferences
+}
+
+package "Immutable Result Domain" {
+  [PracticeResult] as PracticeResult
+  [ProductionGraphModel] as GraphModel
+  [SessionMetronomeSnapshot] as MetronomeSnapshot
+  [SessionDetectionSnapshot] as DetectionSnapshot
+  [SessionJudgementSnapshot] as JudgementSnapshot
+  [PracticeVerdict] as Verdict
+}
+
+Player --> BadApp
+BadApp --> AppVM
+BadApp --> PracticeUI
+BadApp --> ProcessingUI
+BadApp --> ResultsUI
+BadApp --> SettingsUI
+BadApp --> ExerciseUI
+BadApp --> CalibrationUI
+
+AppVM --> AppState
+PracticeUI --> PracticeVM
+ProcessingUI --> PracticeVM
+PracticeVM --> PracticeState
+SettingsUI --> SettingsVM
+
+PracticeVM --> DocumentStore
+PracticeVM --> Compiler
+Compiler --> RuntimeExercise
+PracticeVM --> ExerciseTiming
+PracticeVM --> SessionClock
+PracticeVM --> RecordingCoordinator
+PracticeVM --> Metronome
+RecordingCoordinator --> Recorder
+RecordingCoordinator --> RecordedSession
+
+PracticeVM --> Analyzer
+PracticeVM --> Detector
+PracticeVM --> ResultProcessor
+ResultProcessor --> Matcher
+ResultProcessor --> Assembler
+ResultProcessor --> GraphBuilder
+PracticeVM --> VerdictCalculator
+
+PracticeVM --> MetronomeRepo
+PracticeVM --> DetectionRepo
+PracticeVM --> JudgementRepo
+PracticeVM --> CalibrationRepo
+SettingsVM --> MetronomeRepo
+SettingsVM --> DetectionRepo
+SettingsVM --> JudgementRepo
+SettingsVM --> CalibrationRepo
+MetronomeRepo --> Preferences
+DetectionRepo --> Preferences
+JudgementRepo --> Preferences
+CalibrationRepo --> Preferences
+
+RecordedSession o-- MetronomeSnapshot
+RecordedSession o-- DetectionSnapshot
+RecordedSession o-- JudgementSnapshot
+Assembler --> PracticeResult
+GraphBuilder --> GraphModel
+VerdictCalculator --> Verdict
+PracticeResult o-- MetronomeSnapshot
+PracticeResult o-- DetectionSnapshot
+PracticeResult o-- JudgementSnapshot
+ResultsUI --> PracticeResult
+ResultsUI --> GraphModel
+
+note right of RecordedSession
+  Session configuration is frozen
+  when practice starts.
+end note
+
+note bottom of ProcessingUI
+  UI observes real pipeline state;
+  it does not perform analysis.
+end note
+@enduml

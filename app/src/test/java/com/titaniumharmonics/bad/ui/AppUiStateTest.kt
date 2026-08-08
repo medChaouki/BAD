@@ -10,6 +10,44 @@ import org.junit.Test
 
 class AppUiStateTest {
     @Test
+    fun processingIsDedicatedDestinationAndBackIsDisabled() {
+        val processing = AppUiState().openProcessing()
+
+        assertEquals(AppDestination.PROCESSING, processing.destination)
+        assertEquals(processing, processing.navigateBack())
+    }
+
+    @Test
+    fun debugResultsAreHiddenByDefaultAndBackReturnsToResultsSummary() {
+        val state = AppUiState(
+            destination = AppDestination.RESULTS,
+            resultsDebugVisible = true,
+        )
+
+        val results = state.navigateBack()
+
+        assertEquals(AppDestination.RESULTS, results.destination)
+        assertFalse(results.resultsDebugVisible)
+        assertFalse(AppUiState(destination = AppDestination.RESULTS).resultsDebugVisible)
+    }
+
+    @Test
+    fun resultsBackClosesDetailsBeforeReturningToPractice() {
+        val details = AppUiState(
+            destination = AppDestination.RESULTS,
+            resultsDetailVisible = true,
+        )
+
+        val summary = details.navigateBack()
+        assertEquals(AppDestination.RESULTS, summary.destination)
+        assertFalse(summary.resultsDetailVisible)
+
+        val practice = summary.navigateBack()
+        assertEquals(AppDestination.PRACTICE, practice.destination)
+        assertNull(practice.practiceResult)
+    }
+
+    @Test
     fun settingsOpensFromPracticeAndKeepsCalibrationAvailable() {
         val calibration = TimingCalibration(
             offsetSamples = 2_400L,

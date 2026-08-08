@@ -1,0 +1,71 @@
+@startuml Practice_State_Machine
+title B.A.D. - Practice State Machine
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+hide empty description
+
+[*] --> UNLOADED
+
+UNLOADED --> LOADING : loadExercise(uri)
+LOADING --> READY : compile success
+LOADING --> ERROR : read / validation failure
+ERROR --> LOADING : try loading again
+
+READY --> PREPARING : startPlayback()
+PREPARING --> COUNTING_IN : recorder + metronome started
+COUNTING_IN --> RUNNING : exercise time reaches zero
+COUNTING_IN --> PAUSED : pausePlayback()
+RUNNING --> PAUSED : pausePlayback()
+PAUSED --> RESUME_COUNT_IN : resumePlayback()
+RESUME_COUNT_IN --> COUNTING_IN : resume original count-in
+RESUME_COUNT_IN --> RUNNING : resume exercise
+
+COUNTING_IN --> READY : stopPlayback()
+RUNNING --> READY : stopPlayback()
+PAUSED --> READY : stopPlayback()
+RESUME_COUNT_IN --> READY : stopPlayback()
+
+COUNTING_IN --> PREPARING : restartPlayback()
+RUNNING --> PREPARING : restartPlayback()
+PAUSED --> PREPARING : restartPlayback()
+RESUME_COUNT_IN --> PREPARING : restartPlayback()
+
+RUNNING --> COMPLETED : ExerciseTiming completed
+COMPLETED --> PROCESSING : begin finalization
+PROCESSING --> READY : prepareForNextRun()
+PROCESSING --> PREPARING : retryExercise()
+
+PREPARING --> ERROR : playback / recording failure
+COUNTING_IN --> ERROR : playback / recording failure
+RUNNING --> ERROR : playback / recording failure
+PAUSED --> ERROR : pause / resume failure
+RESUME_COUNT_IN --> ERROR : resume failure
+PROCESSING --> ERROR : WAV finalization failure
+
+READY --> UNLOADED : unloadExercise()
+ERROR --> UNLOADED : unloadExercise()
+PROCESSING --> UNLOADED : abandon + unload
+
+state PROCESSING {
+  [*] --> WEIGHING
+  WEIGHING --> MEASURING : AudioAnalysisState.Ready
+  MEASURING --> VERDICT : PracticeResultState.Ready
+  VERDICT --> [*] : automatic Results navigation
+  WEIGHING --> FAILED : finalization / preprocessing failure
+  MEASURING --> FAILED : detection / result failure
+  FAILED --> WEIGHING : retry preprocessing
+  FAILED --> MEASURING : retry result assembly
+}
+
+note right of PROCESSING
+  WEIGHING and MEASURING each have a
+  1.5 s minimum visible duration.
+  Actual processing may keep them longer.
+end note
+
+note bottom of VERDICT
+  EARLY, ON_TIME, LATE, MISSING, or CREATIVE.
+  Verdict is visible for 900 ms.
+end note
+@enduml

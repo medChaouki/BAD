@@ -7,6 +7,8 @@ import com.titaniumharmonics.bad.exercise.ExerciseStorageInitializer
 import com.titaniumharmonics.bad.audio.calibration.SharedPreferencesTimingCalibrationStore
 import com.titaniumharmonics.bad.audio.calibration.TimingCalibration
 import com.titaniumharmonics.bad.audio.calibration.TimingCalibrationRepository
+import com.titaniumharmonics.bad.audio.result.PracticeResult
+import com.titaniumharmonics.bad.audio.result.ProductionGraphModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +44,10 @@ class AppViewModel(
             destination = AppDestination.EXERCISE_EDITOR,
             editorDocumentUri = null,
             editorReturnDestination = AppDestination.PRACTICE,
+            practiceResult = null,
+            productionGraph = null,
+            resultsDetailVisible = false,
+            resultsDebugVisible = false,
         )
     }
 
@@ -82,27 +88,46 @@ class AppViewModel(
         mutableUiState.value = mutableUiState.value.openSettings()
     }
 
+    fun openResults(result: PracticeResult, graphModel: ProductionGraphModel) {
+        mutableUiState.value = mutableUiState.value.openResults(result, graphModel)
+    }
+
+    fun openProcessing() {
+        mutableUiState.value = mutableUiState.value.openProcessing()
+    }
+
+    fun showResultDetails() {
+        val state = mutableUiState.value
+        if (state.destination == AppDestination.RESULTS && state.practiceResult != null) {
+            mutableUiState.value = state.copy(resultsDetailVisible = true)
+        }
+    }
+
+    fun showResultDebug() {
+        val state = mutableUiState.value
+        if (state.destination == AppDestination.RESULTS && state.practiceResult != null) {
+            mutableUiState.value = state.copy(
+                resultsDetailVisible = false,
+                resultsDebugVisible = true,
+            )
+        }
+    }
+
+    fun leaveResultsForPractice() {
+        mutableUiState.value = mutableUiState.value.copy(
+            destination = AppDestination.PRACTICE,
+            practiceResult = null,
+            productionGraph = null,
+            resultsDetailVisible = false,
+            resultsDebugVisible = false,
+        )
+    }
+
     fun timingCalibrationChanged(calibration: TimingCalibration?) {
         mutableUiState.value = mutableUiState.value.copy(activeTimingCalibration = calibration)
     }
 
     fun navigateBack() {
-        val state = mutableUiState.value
-        mutableUiState.value = when (state.destination) {
-            AppDestination.PRACTICE -> state
-            AppDestination.EXERCISE_LIBRARY -> state.copy(
-                destination = AppDestination.PRACTICE,
-            )
-            AppDestination.EXERCISE_EDITOR -> state.copy(
-                destination = state.editorReturnDestination,
-                editorDocumentUri = null,
-            )
-            AppDestination.SETTINGS -> state.copy(
-                destination = AppDestination.PRACTICE,
-            )
-            AppDestination.TIMING_CALIBRATION -> state.copy(
-                destination = AppDestination.PRACTICE,
-            )
-        }
+        mutableUiState.value = mutableUiState.value.navigateBack()
     }
 }

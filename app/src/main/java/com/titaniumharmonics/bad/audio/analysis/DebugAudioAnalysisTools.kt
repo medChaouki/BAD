@@ -3,6 +3,8 @@ package com.titaniumharmonics.bad.audio.analysis
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackPhase
 import com.titaniumharmonics.bad.audio.DebugRecordingPlaybackState
 import com.titaniumharmonics.bad.audio.RecordedSession
+import com.titaniumharmonics.bad.audio.detection.CandidateRejectionReason
+import com.titaniumharmonics.bad.audio.detection.HitDetectionResult
 import java.io.BufferedWriter
 import java.io.IOException
 import java.io.OutputStream
@@ -15,14 +17,22 @@ object DebugAudioAnalysisCsvExporter {
         "exercise_time_ms,raw_sample,filtered_sample,frame_peak," +
             "frame_level,envelope,noise_floor,pre_notch_level,post_notch_level," +
             "pre_notch_envelope,post_notch_envelope,metronome_frequency_hz," +
-            "notch_center_hz,notch_q,notch_enabled"
+            "notch_center_hz,notch_q,notch_enabled,adaptive_threshold,candidate," +
+            "metronome_band_ratio,broadband_residual_energy,spectral_bandwidth," +
+            "spectral_centroid,classification,rejected_as_metronome,raw_hit_sample," +
+            "calibrated_hit_sample,confidence"
 
-    fun write(analysis: AudioAnalysis, output: OutputStream) {
+    fun write(
+        analysis: AudioAnalysis,
+        output: OutputStream,
+        detection: HitDetectionResult? = null,
+    ) {
         try {
             BufferedWriter(OutputStreamWriter(output, Charsets.UTF_8)).use { writer ->
                 writer.appendLine(HEADER)
                 repeat(analysis.frameCount) { index ->
                     val frame = analysis.frame(index)
+                    val candidate = detection?.candidates?.firstOrNull { it.onsetFrame == index }
                     writer.append(frame.exerciseTimeMillis.stableString())
                     writer.append(',').append(frame.rawSample.stableString())
                     writer.append(',').append(frame.filteredSample.stableString())
@@ -46,6 +56,26 @@ object DebugAudioAnalysisCsvExporter {
                     writer.append(',').append(
                         analysis.metronomeConfiguration.notch.enabled.toString(),
                     )
+                    writer.append(',').append(
+                        detection?.adaptiveThreshold?.get(index)?.stableString() ?: "",
+                    )
+                    writer.append(',').append((candidate != null).toString())
+                    writer.append(',').append(candidate?.metronomeBandRatio?.stableString() ?: "")
+                    writer.append(',').append(
+                        candidate?.broadbandResidualEnergy?.stableString() ?: "",
+                    )
+                    writer.append(',').append(candidate?.spectralBandwidthHz?.stableString() ?: "")
+                    writer.append(',').append(candidate?.spectralCentroidHz?.stableString() ?: "")
+                    writer.append(',').append(candidate?.classification?.name ?: "")
+                    writer.append(',').append(
+                        (candidate?.rejectionReason == CandidateRejectionReason.METRONOME_ONLY)
+                            .toString(),
+                    )
+                    writer.append(',').append(candidate?.rawExerciseSample?.toString() ?: "")
+                    writer.append(',').append(
+                        candidate?.calibratedExerciseSample?.toString() ?: "",
+                    )
+                    writer.append(',').append(candidate?.confidence?.stableString() ?: "")
                     writer.newLine()
                 }
             }
@@ -68,7 +98,50 @@ object DebugAudioAnalysisCsvExporter {
     }
 }
 
+object DebugHitCandidateCsvExporter {
+    const val HEADER =
+        "candidate_index,accepted,raw_time_ms,calibrated_time_ms,peak_time_ms," +
+            "peak_amplitude,signal_to_noise,metronome_band_ratio," +
+            "broadband_residual_energy,spectral_bandwidth,classification,confidence," +
+            "calibration_applied"
+
+    fun write(result: HitDetectionResult, output: OutputStream) {
+        try {
+            BufferedWriter(OutputStreamWriter(output, Charsets.UTF_8)).use { writer ->
+                writer.appendLine(HEADER)
+                result.candidates.forEach { candidate ->
+                    writer.append(candidate.index.toString())
+                    writer.append(',').append(candidate.accepted.toString())
+                    writer.append(',').append(stable(candidate.rawTimeMillis))
+                    writer.append(',').append(stable(candidate.calibratedTimeMillis))
+                    writer.append(',').append(stable(candidate.peakTimeMillis))
+                    writer.append(',').append(stable(candidate.peakAmplitude.toDouble()))
+                    writer.append(',').append(stable(candidate.signalToNoiseRatio))
+                    writer.append(',').append(stable(candidate.metronomeBandRatio))
+                    writer.append(',').append(stable(candidate.broadbandResidualEnergy))
+                    writer.append(',').append(stable(candidate.spectralBandwidthHz))
+                    writer.append(',').append(candidate.classification.name)
+                    writer.append(',').append(stable(candidate.confidence))
+                    writer.append(',').append(candidate.calibrationApplied.toString())
+                    writer.newLine()
+                }
+            }
+        } catch (exception: IOException) {
+            throw AudioAnalysisException.CsvExportFailure(
+                "Unable to export debug hit-candidate CSV.",
+                exception,
+            )
+        }
+    }
+
+    private fun stable(value: Double): String {
+        require(value.isFinite())
+        return java.lang.Double.toString(value)
+    }
+}
+
 data class AnalysisGraphPoint(
+    val frameIndex: Int,
     val exerciseSampleFrame: Long,
     val preNotchEnvelope: Float,
     val postNotchEnvelope: Float,
@@ -91,6 +164,7 @@ object PeakPreservingGraphDownsampler {
         }
         val points = indexes.map { index ->
             AnalysisGraphPoint(
+                frameIndex = index,
                 exerciseSampleFrame = analysis.frameCenterExerciseSamples[index],
                 preNotchEnvelope = analysis.preNotchEnvelope[index],
                 postNotchEnvelope = analysis.envelope[index],

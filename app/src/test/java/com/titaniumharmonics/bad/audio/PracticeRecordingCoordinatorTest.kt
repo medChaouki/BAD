@@ -11,16 +11,33 @@ import java.io.File
 import java.nio.file.Files
 import com.titaniumharmonics.bad.audio.metronome.MetronomeConfiguration
 import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
+import com.titaniumharmonics.bad.audio.detection.HitDetectionConfiguration
+import com.titaniumharmonics.bad.audio.detection.SessionDetectionSnapshot
+import com.titaniumharmonics.bad.audio.matching.JudgementConfiguration
+import com.titaniumharmonics.bad.audio.matching.SessionJudgementSnapshot
 
 class PracticeRecordingCoordinatorTest {
     @Test
-    fun completedSessionPreservesFrozenMetronomeConfiguration() {
+    fun completedSessionPreservesFrozenConfigurations() {
         val fixture = fixture()
         val snapshot = SessionMetronomeSnapshot(
             configuration = MetronomeConfiguration.DEFAULT.withToneFrequency(5_000),
             downbeatsOnly = true,
         )
-        fixture.coordinator.startSession(fixture.exercise, snapshot)
+        val detectionSnapshot = SessionDetectionSnapshot(
+            configuration = HitDetectionConfiguration.DEFAULT.copy(
+                minimumAbsoluteThreshold = 0.08,
+            ),
+        )
+        val judgementSnapshot = SessionJudgementSnapshot(
+            JudgementConfiguration.DEFAULT.copy(onTimeBeforeMillis = 25.0),
+        )
+        fixture.coordinator.startSession(
+            fixture.exercise,
+            snapshot,
+            detectionSnapshot,
+            judgementSnapshot,
+        )
         fixture.recorder.appendFrames(192_000L)
         fixture.coordinator.markExerciseStarted()
         fixture.recorder.appendFrames(48_000L)
@@ -31,6 +48,12 @@ class PracticeRecordingCoordinatorTest {
         assertEquals(snapshot, session.metronomeSnapshot)
         assertEquals(5_000, session.metronomeSnapshot.configuration.tone.frequencyHz)
         assertEquals(7_000, independentlyChangedGlobal.tone.frequencyHz)
+        assertEquals(detectionSnapshot, session.detectionSnapshot)
+        assertEquals(0.08, session.detectionSnapshot.configuration.minimumAbsoluteThreshold, 0.0)
+        assertEquals(judgementSnapshot, session.judgementSnapshot)
+        val laterConfiguration = judgementSnapshot.configuration.copy(onTimeBeforeMillis = 35.0)
+        assertEquals(25.0, session.judgementSnapshot.configuration.onTimeBeforeMillis, 0.0)
+        assertEquals(35.0, laterConfiguration.onTimeBeforeMillis, 0.0)
     }
 
     @Test

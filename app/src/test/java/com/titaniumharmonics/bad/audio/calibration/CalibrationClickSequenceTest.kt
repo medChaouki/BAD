@@ -19,7 +19,8 @@ class CalibrationClickSequenceTest {
             )
         }
         assertEquals(5 * 48_000, sequence.samples.size)
-        assertTrue(config.algorithmVersion > 0)
+        assertEquals(TimingCalibrationConfig.CURRENT_ALGORITHM_VERSION, config.algorithmVersion)
+        assertEquals(2, config.algorithmVersion)
     }
 
     @Test

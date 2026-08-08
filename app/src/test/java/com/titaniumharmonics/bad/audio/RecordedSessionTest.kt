@@ -2,6 +2,7 @@ package com.titaniumharmonics.bad.audio
 
 import com.titaniumharmonics.bad.audio.metronome.MetronomeConfiguration
 import com.titaniumharmonics.bad.audio.metronome.SessionMetronomeSnapshot
+import com.titaniumharmonics.bad.audio.detection.SessionDetectionSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -95,6 +96,10 @@ class RecordedSessionTest {
         assertEquals(
             SessionMetronomeSnapshot.COMPATIBILITY_FALLBACK,
             session.metronomeSnapshot,
+        )
+        assertEquals(
+            SessionDetectionSnapshot.COMPATIBILITY_FALLBACK,
+            session.detectionSnapshot,
         )
     }
 

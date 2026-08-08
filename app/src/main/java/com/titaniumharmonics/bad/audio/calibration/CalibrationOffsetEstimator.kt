@@ -40,6 +40,16 @@ class CalibrationOffsetEstimator(
         if (!spacingIsValid) {
             return Result.failure(CalibrationEstimationException(CalibrationFailureReason.INCONSISTENT_TIMING))
         }
+        if (median <= 0L) {
+            return Result.failure(
+                CalibrationEstimationException(
+                    reason = CalibrationFailureReason.NON_POSITIVE_OFFSET,
+                    measuredOffsetSamples = median,
+                    matchedClickCount = inliers.size,
+                    offsetSpreadSamples = spread,
+                ),
+            )
+        }
         val medianCorrelation = inliers.map { (it.correlation * 1_000_000).toLong() }
             .let(TimingCalibrationMath::median) / 1_000_000.0
         val highSpread = configuration.highConfidenceSpreadMillis * sampleRateHz / 1_000.0
@@ -69,4 +79,7 @@ class CalibrationOffsetEstimator(
 
 class CalibrationEstimationException(
     val reason: CalibrationFailureReason,
+    val measuredOffsetSamples: Long? = null,
+    val matchedClickCount: Int? = null,
+    val offsetSpreadSamples: Long? = null,
 ) : Exception(reason.userMessage)

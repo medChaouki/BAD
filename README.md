@@ -4,456 +4,110 @@
 
 > With B.A.D., the beat approves you.
 
-B.A.D. is an Android drum-practice application that will listen to drum or
-practice-pad hits, compare them with a rhythmic exercise, and judge whether
-each hit was early, on time, late, or missed.
+B.A.D. is an Android drum-practice app. It records a player performing a
+rhythmic exercise, detects drum hits, compares them with the expected notes,
+and reports whether the playing was early, on time, late, missing, or creative.
 
-The project is currently an early version 1 prototype. It can select, load,
-edit, save, and run a single-lane exercise with a generated metronome and a
-scrolling Compose timeline. Practice sessions are captured as WAV audio;
-automatic hit detection is not implemented yet.
+## Current state
 
-## Current features
+B.A.D. is a functional version 1 prototype built with Kotlin and Jetpack
+Compose. The complete local practice flow is implemented:
 
-- Versioned, data-driven JSON exercise format
-- Separate persisted editable and compiled runtime exercise models
-- Validated exercise-library loading and unloading for practice
-- Automatic `Download/B.A.D/assets` exercise folder initialization
-- Exercise validation with explicit error reporting
-- Musical tick-to-time conversion
-- Monotonic practice-session clock
-- Mandatory one-measure count-in, running, stopped, and completed states
-- Generated 48 kHz mono PCM metronome
-- Distinct quarter-note count-in and note-driven exercise clicks
-- Accented first beat of each measure
-- Streaming `AudioTrack` output
-- Practice-session microphone capture to mono PCM WAV, preferring 48 kHz with
-  a 44.1 kHz fallback
-- Offline WAV validation and transient-envelope preprocessing after completed
-  practice sessions
-- Temporary debug-only in-app recording playback, position, and deletion
-- Temporary debug CSV export and synchronized envelope/noise-floor graph
-- User-triggered universal speaker-to-microphone timing calibration
-- Single-lane scrolling rhythm timeline
-- Static first-measure preview while an exercise is idle
-- BPM-scaled beat highlights at the judgement line
-- Full-screen practice playback with pause, resume, repeat, and stop controls
-- Branded adaptive launcher icon and orientation-aware startup screen
-- Exercise creation and modification with JSON file creation and overwriting
-- Editable rhythmic measure patterns with persisted subdivisions and multipliers
-- Purpose-aware exercise library with tap-to-load or tap-to-edit and
-  long-press deletion
-- Home screen sections for creating or modifying exercises and starting practice
-- Collapsible per-exercise playback controls for tempo, measure
-  count, and downbeat-only clicks
-- Lifecycle-aware playback cleanup
-- JVM tests for exercise parsing, validation, timing, and click generation
-- GitHub Actions verification with downloadable debug APKs
+```text
+Exercise → Count-in and recording → Processing verdict → Detailed results
+```
 
-## Running the app
+Current capabilities include:
 
-### Requirements
+- Create, edit, validate, save, browse, and delete versioned JSON exercises.
+- Configure tempo, measure count, and metronome playback for practice.
+- Record mono PCM WAV audio with pause, resume, repeat, and stop handling.
+- Calibrate the phone speaker-to-microphone timing offset.
+- Preprocess recorded audio and reject metronome tones using localized FFT
+  analysis.
+- Detect drum hits, apply calibration, match hits to expected notes, and
+  classify Early, On Time, Late, Missed, and Extra events.
+- Show timing statistics, detailed note judgements, and an interactive
+  production graph.
+- Persist metronome, detection, judgement, and calibration settings locally.
+- Freeze settings into each active session so later changes cannot reinterpret
+  a completed result.
+- Provide debug-only WAV playback, analysis graphs, and CSV export tools.
+
+Audio analysis, matching, judgement, statistics, and graph generation run
+locally on the device. No account or network service is required.
+
+## Processing verdict
+
+After recording finishes, a dedicated black processing screen follows the real
+analysis pipeline:
+
+1. **YOU HAVE BEEN WEIGHED**
+2. **YOU HAVE BEEN MEASURED**
+3. **AND YOU HAVE BEEN FOUND...**
+
+The first two messages remain visible for at least 1.5 seconds each and may
+remain longer when processing is still running. Large dots animate below the
+text every 225 ms. The final verdict is shown for 900 ms before Results opens
+automatically. Back navigation is disabled during processing.
+
+`PracticeVerdictCalculator` uses the completed result and the session's frozen
+judgement configuration:
+
+```text
+hit rate below minimumHitRateForVerdict → MISSING
+extra-hit rate above Creative threshold → CREATIVE
+mean bias before the On-Time window     → EARLY
+mean bias after the On-Time window      → LATE
+otherwise                               → ON TIME
+```
+
+`minimumHitRateForVerdict` and
+`minimumExtraHitRateForCreativeVerdict` both default to 30% and are configurable
+from 0% to 100% in Settings. `MISSING` takes priority over `CREATIVE`, preventing
+misleading feedback when too few expected notes were matched. The Creative
+threshold is strict: exactly 30% extra hits is not Creative. The verdict is not
+a score; it is a high-level summary of the player's performance tendency. The
+extra-hit rate is the existing result statistic: extra hits divided by all
+accepted detected hits.
+
+## Requirements
 
 - Android Studio
 - Android SDK 36
-- JDK 21, such as Android Studio's bundled runtime
-- Android 8.0 (API 26) or newer device
+- JDK 21 for Gradle/CI
+- Android 8.0 (API 26) or newer
+- Microphone permission
 
-A physical Android device is recommended for evaluating audio and visual
-timing. An emulator is sufficient for checking layout and application flow.
+A physical device is strongly recommended because audio latency, speaker
+response, microphone response, and acoustic rejection vary by device. An
+emulator is suitable for layout and navigation checks.
 
-## Exercise format
+The bundled example exercise is located at
+`app/src/main/assets/exercises/basic-quarter-notes.json`. The app also
+initializes a B.A.D. exercise directory in shared Downloads where supported,
+with an app-private fallback on older Android versions.
 
-Exercises are versioned JSON documents that can be stored anywhere exposed by
-Android's system file picker. A bundled example remains under:
+## Build and verify
 
-```text
-app/src/main/assets/exercises/
-```
-
-On Android 10 or newer, the first app launch creates
-`Download/B.A.D/assets/` in shared storage and copies
-`basic-quarter-notes-v2.json` there when that sample is absent. This seeding runs
-only once per installation, so a sample deliberately deleted later is not
-recreated. Existing folders and files are never erased or overwritten. Create
-and the Exercise Library's Browse file pickers open in this directory by
-default while still allowing navigation elsewhere.
-
-Android 8 and 9 use an app-private external-storage fallback because creating a
-public Downloads folder would require a runtime storage permission.
-
-Example:
-
-```json
-{
-  "fileType": "bad-exercise",
-  "formatVersion": 2,
-  "id": "basic-quarter-notes",
-  "name": "Quarter Note Inspection",
-  "description": "Four measures of quarter notes.",
-  "tempoBpm": 100.0,
-  "timeSignature": {
-    "numerator": 4,
-    "denominator": 4
-  },
-  "measureCount": 4,
-  "ticksPerQuarterNote": 480,
-  "measureSubdivisions": [
-    "quarter",
-    "eighth",
-    "eighth_triplet",
-    "sixteenth"
-  ],
-  "measureMultipliers": [
-    1,
-    1,
-    1,
-    1
-  ],
-  "notes": [
-    {
-      "positionTicks": 0,
-      "accent": true
-    },
-    {
-      "positionTicks": 480
-    }
-  ]
-}
-```
-
-`fileType` must be `bad-exercise`. It identifies the document before the
-remaining exercise structure and musical values are validated.
-
-`ticksPerQuarterNote` defines the musical resolution. At a resolution of 480:
-
-- Quarter note: 480 ticks
-- Eighth note: 240 ticks
-- Sixteenth note: 120 ticks
-- Eighth-note triplet: 160 ticks
-
-`positionTicks` is a musical position measured from the beginning of the
-exercise. It is not a timer callback, audio sample index, or stored wall-clock
-timestamp.
-
-`measureSubdivisions` stores one display/editing grid per measure. Supported
-values are `quarter`, `eighth`, `eighth_triplet`, and `sixteenth`. Older
-exercise files without this field remain valid and use `quarter` for every
-measure. Changing a subdivision explicitly resets that measure with every slot
-in the new grid enabled.
-
-`measureCount` is the number of editable measure patterns.
-`measureMultipliers` stores how many consecutive measures each pattern
-represents. Existing files without this field default every pattern to `1`.
-Each multiplier must be between `1` and `99`; the expanded exercise length is
-the sum of all multipliers.
-
-## Project structure
-
-```text
-app/src/main/java/com/titaniumharmonics/bad/
-├── audio/       Metronome, WAV recording/playback, and offline analysis
-├── exercise/    Exercise model, JSON codec, validation, and asset loading
-├── timing/      Monotonic clock, musical timing, and session progression
-└── ui/
-    ├── practice/ Practice ViewModel and Compose UI
-    └── theme/    Material theme
-```
-
-The exercise, timing, and click-generation logic is kept separate from
-Compose and can be tested on the JVM. Validated JSON is decoded into the
-persisted `EditableExercise` source of truth. Practice mode compiles it in
-memory into an immutable `RuntimeExercise` containing sequential measures and
-expected notes with measure-local and absolute tick positions. Timing,
-timeline, and metronome code use only this runtime representation; the editor
-and storage layers continue to use the persisted representation. Exercise
-files are opened and created through Android's Storage Access Framework, so
-broad storage permission is not required.
-
-The editor changes the exercise name, BPM, pattern count, each pattern's
-persisted multiplier and subdivision, and its note slots. It shows both the
-editable pattern count and expanded measure count. Pattern labels use the
-expanded indexes, so multipliers `4`, `2`, and `1` produce ranges `1–4`, `5–6`,
-and `7`. Each pattern's compact overflow menu supports duplicate, clear, move
-up, and move down actions; swipe left continues to expose deletion. Duplicate
-copies the complete pattern and multiplier, while Clear explicitly creates a
-silent pattern without changing its subdivision or multiplier. New patterns
-start at `×1` with all four Quarter slots enabled, and the editor scrolls to
-the new pattern after Add Pattern is pressed.
-Selecting another subdivision resets that pattern with every new slot enabled;
-tapping a slot then enables or disables its expected note. Notes outside the
-selected grid remain preserved and produce a warning until an explicit
-subdivision reset replaces the pattern. When an existing file is overwritten,
-its identifier, description, time signature, and timing resolution
-are preserved. Pattern duration comes from the exercise time signature.
-
-When an exercise is loaded for practice, each compact pattern is expanded in
-memory into its configured number of flat, sequential runtime measures. The
-persisted JSON remains compact. Every repeated note keeps its exact
-measure-local tick and receives a new absolute position from its runtime
-measure offset, so Quarter, Eighth, Eighth-triplet, and Sixteenth timing remain
-exact.
-
-Opening Create or Modify clears the currently loaded in-memory practice
-exercise before navigating. Saved exercise files are not changed.
-
-The editor's Play exercise action always saves the current edits first. New
-exercises request a destination file, while existing exercises overwrite their
-source file. After a successful save, the saved JSON is loaded into Practice
-and playback starts with the normal startup delay and count-in. A cancelled or
-failed save remains in the editor and does not start playback.
-
-During playback, exercise metronome clicks occur only at exact expected-note
-ticks. Disabled notes and empty measures are silent. Every session and resume
-uses exactly one measure of Quarter-note count-in clicks with a distinct
-higher-pitched sound. Count-in is a playback invariant and is therefore not
-stored in exercise JSON. The timeline and visual beat highlights continue
-independently so musical time stays visible.
-
-Swiping a measure to the left reveals a red Delete action. Deletion occurs only
-after that action is pressed. Notes inside a deleted imported measure are
-removed, while notes in later measures shift left to preserve their position
-within the remaining measure sequence.
-
-Load and Modify open the same Exercise Library containing only files from the
-default folder that pass B.A.D. format and exercise validation. Tapping loads
-the selected exercise for Practice or opens it in the editor, according to the
-entry point. Pressing and holding requests permanent deletion with
-confirmation; the file is revalidated immediately before removal. Browse other
-folders keeps the Android document picker available for exercises stored
-elsewhere. Each library card shows BPM, compact pattern count, and expanded
-measure count.
-
-## Timing model
-
-The exercise stores musical positions rather than elapsed timestamps. During
-compilation, a runtime measure starts at
-`runtimeMeasureIndex × measureDurationTicks`, and each expected note is placed
-at `runtimeMeasureStartTick + positionInMeasureTicks`. At runtime, musical
-ticks are converted to nanoseconds from the exercise tempo.
-
-The practice session uses a monotonic clock. The scrolling timeline follows
-that clock; Compose animation is not the authoritative timing source.
-
-Metronome tones are sample-aligned relative to one another. Physical output
-latency still depends on the Android device and audio route; the universal
-timing calibration described below measures the phone-speaker/built-in-
-microphone path.
-
-Playback settings can be adjusted while an exercise is idle. They remain in
-effect for repeated runs of that exercise and reset when another exercise is
-loaded. Longer sessions repeat the exercise pattern; shorter sessions truncate
-it at the selected measure boundary. Settings are locked while playback is
-preparing, counting in, or running.
-
-Playback settings are collapsed by default. Tapping the exercise information
-card toggles them without changing the configured values.
-
-The **First note only** option shows its enabled or disabled state beneath the
-label. When enabled, it keeps the full count-in audible, then plays the
-metronome only when an expected note is enabled at the beginning of an exercise
-measure.
-
-## Metronome and rejection filter
-
-The metronome uses a deterministic Hann-windowed sine burst instead of a
-broadband click. Defaults are 6000 Hz, 10 ms, 55% normal volume, and 85% accent
-volume. Normal and accent beats use the same frequency and differ only in
-amplitude. Settings exposes every control directly: tone frequency
-(3000–9000 Hz), duration (5–30 ms), independent normal/accent volume
-(0–100%), notch enablement, notch center (3000–9000 Hz), and Q (2–30, default
-10). Normal and accent test-tone actions play four beats at 500 ms intervals
-over two seconds without starting recording or practice.
-
-The notch center follows tone frequency by default. Editing the notch center
-creates a persistent custom override; **Relink to tone frequency** restores
-automatic following. Invalid or corrupted stored values fall back to the
-documented defaults. Settings changes affect future sessions only.
-
-Each practice run freezes a public immutable `SessionMetronomeSnapshot` with
-the exact `MetronomeConfiguration` and downbeats-only state used for playback.
-`RecordedSession` retains that snapshot in memory, so later global changes do
-not reinterpret an older WAV. Sessions constructed without a snapshot use the
-documented default configuration as a compatibility fallback. These domain
-types are independent from Compose and are available to future audio and
-grading modules.
-
-During the exercise, every beat produces a brief green outline ring as it
-crosses the judgement line, including beats muted by downbeat-only mode. The
-ring follows that beat to the left and lasts for one quarter of the current
-beat duration, so it scales with tempo.
-
-The judgement line is centered on the rhythm lane and is ten times the diameter
-of the largest note circle rather than spanning the full player height.
-
-While an exercise is idle, the timeline centers the notes from its first
-measure as a static musical preview while preserving their relative tick
-spacing. The judgement line is hidden in preview mode.
-
-Starting an inspection opens a dedicated full-screen player containing the
-timeline, current status, and playback controls. Player text adapts to the
-active theme, using white in dark themes and black in light themes. Initial
-playback waits two seconds after opening the player before starting the
-mandatory one-measure count-in, giving the device time to prepare the screen
-and audio path. Pause freezes both metronome audio and monotonic timeline
-progress. Resume plays one measure of count-in while the timeline remains
-frozen at the paused position, then continues from there. During an initial or
-Repeat count-in, the playback timeline waits at one quarter note before
-exercise time zero. It begins scrolling during the final quarter note of the
-count-in, reaches time zero with the exercise audio, and continues without a
-visual jump. Once exercise playback begins, the Player shows the current
-one-based measure and total measure count beneath the status. It preserves that
-progress while paused or during Resume count-in and shows the final measure on
-completion. Stop returns to the exercise settings.
-
-Microphone permission is requested when the app opens if it has not already
-been granted, and is checked again before every session. A declined permission
-is requested again on the next app launch. Recording starts immediately before
-the mandatory initial count-in and pauses with practice playback. It remains
-paused throughout every resume count-in, then resumes in the same logical
-transition as exercise playback. Natural completion finalizes
-`Music/B.A.D/recordings/debug-recording.wav` in app-specific external storage;
-stopped, cancelled, or failed sessions discard their partial recording.
-
-A successfully finalized WAV produces an immutable in-memory
-`RecordedSession`. The recorder's successfully written sample-frame count is
-authoritative: `exerciseStartSampleFrame` marks the first graded exercise
-sample, while earlier samples belong to the initial count-in. Paused time and
-resume count-ins append no frames, so offline grading can subtract this start
-index to obtain continuous exercise-relative sample positions. No session
-metadata or timeline sidecar is written to storage.
-
-Natural completion also starts offline preprocessing away from the UI thread.
-The WAV reader validates RIFF/WAVE chunks instead of assuming a fixed 44-byte
-header and accepts the recorder's mono signed 16-bit PCM at either 48 kHz or
-44.1 kHz. Session metadata must match the WAV exactly. Analysis begins at
-`exerciseStartSampleFrame`, so the initial count-in is excluded; paused time
-and resume count-ins are already absent from the recorded sample stream.
-
-The first analysis pass normalizes PCM, removes the graded signal's mean DC
-offset, applies a configurable first-order 80 Hz high-pass filter, then applies
-the session snapshot's second-order biquad notch before measuring overlapping
-5 ms frames at 2 ms hops. The notch is enabled by default at 6000 Hz with Q 10.
-Each frame uses its actual center sample
-as its exercise timestamp, including the final partial frame without zero
-padding. Post-notch frame peak and RMS level feed a transient envelope with 2 ms attack
-and 12 ms release, followed by a slowly adapting noise-floor estimate. These
-defaults are centralized in `AudioAnalysisConfig`; onset detection is not yet
-implemented.
-
-Debug builds show a temporary **Debug: Recorded Audio** card after natural
-completion. It uses Android `MediaPlayer` to play, pause, stop, replay, or
-delete the WAV and shows its current position, duration, and file path. A new
-practice session stops debug playback and replaces the previous recording. It
-also shows the actual sample rate, total and graded frame counts, the exercise
-start frame, and recording and graded durations.
-After preprocessing, the card adds peak-preserving pre-notch and post-notch
-envelopes, the post-notch noise floor, expected metronome markers, and the WAV
-playback cursor. The graph keeps the count-in region visually separate from
-exercise time zero and bounds rendered data to roughly 1,500 points. A
-debug-only Storage Access Framework action exports one locale-independent CSV
-row per analysis frame with the existing fields plus pre/post notch levels and
-envelopes and the frozen tone/notch configuration. Analysis or export failure
-does not remove the playable WAV.
-Leaving the Practice screen releases both capture and playback resources. The
-recording pipeline remains present in release builds, but this playback card is
-compiled behind `BuildConfig.DEBUG` and is not shown there.
-
-Current practice recordings retain structural software sample alignment. The
-calibration below measures the remaining fixed phone audio-path offset; a later
-PR will apply it when detected hits are introduced.
-
-## Timing calibration
-
-The app opens the dedicated Timing Calibration flow automatically at launch
-when no valid calibration is stored. After that, a small gear icon opens
-Settings, where calibration can be viewed, reset, or run again manually.
-Version 1 stores one universal calibration value rather than separate device
-or route profiles.
-Calibration must use the phone speaker and built-in microphone with wired,
-Bluetooth, USB, HDMI, and other external audio devices disconnected. Android
-route APIs block known external routes; uncertain routing requires explicit
-user confirmation, and a harmful route change during capture cancels the run.
-
-Calibration records a deterministic five-second sequence containing eight
-synthetic clicks spaced 500 ms apart, with leading and trailing silence. The
-sequence is streamed through a bounded `AudioTrack` buffer for device
-compatibility. The click waveform is the same generator used by practice playback. Normalized
-cross-correlation locates each known waveform in the PCM recording. Matches
-must pass correlation, spacing, count, and offset-consistency checks; robust
-outliers are removed and the median remaining offset becomes the calibration.
-A measurable result is shown as a pending value and is not stored until the
-user explicitly accepts it. The user may also reject it. Measurable results
-that miss automatic consistency thresholds remain reviewable, while a run with
-no usable measurement fails without creating a candidate.
-
-The authoritative sign convention is:
-
-```text
-calibrationOffsetSamples = recordedClickSample - expectedClickSample
-```
-
-A positive value means the speaker click arrived later in the recorded PCM
-than its scheduled reference. Future onset processing will correct a raw hit
-with `rawExerciseRelativeHitSample - calibrationOffsetSamples`. When sample
-rates differ, the stored offset is converted by duration and rounded to the
-nearest sample, with exact half-sample ties rounded away from zero.
-
-An accepted offset, capture sample rate, confidence, match counts, spread,
-timestamp, and algorithm version are stored locally in app preferences.
-Rejecting or failing a recalibration never replaces the previous valid value;
-reset removes it. Debug builds retain the temporary WAV and show playback, the recorded
-waveform, expected and detected click markers, individual correlations, and
-offsets. Release builds delete the temporary recording.
-
-This universal value corrects the tested phone-speaker/built-in-microphone
-pipeline only. Bluetooth and other routes can introduce different additional
-latency during practice. A 6000 Hz tone is a starting compromise and audibility
-and acoustic suppression still vary with phone speakers, headphones, Bluetooth
-codecs, microphone response, room acoustics, and playback volume. Drum onset
-detection remains deferred to PR 5.1.
-
-When microphone detection and hit matching are added, timing feedback will use
-a green ring for on-time hits, a blue ring for early hits, and a red ring for
-late hits. Missed notes will show a gray `X` at the expected-note position, and
-extra hits will show a red `X` at the detected-hit position. Extra hits remain
-a distinct result category for accurate session statistics.
-
-## Continuous integration
-
-GitHub Actions runs unit tests, Android lint, and a debug build for pull
-requests, pushes to `main`, and manual workflow runs. Successful runs publish
-the debug APK for 14 days. Test and lint reports are uploaded even when
-verification fails.
-
-## Tests and static checks
-
-Run JVM tests:
+From the repository root:
 
 ```shell
 ./gradlew testDebugUnitTest
-```
-
-Build the debug application:
-
-```shell
+./gradlew lintDebug
 ./gradlew assembleDebug
 ```
 
-Run Android lint:
+On Windows, use `gradlew.bat` instead of `./gradlew`.
 
-```shell
-./gradlew lintDebug
-```
+GitHub Actions runs the same unit-test, lint, and debug-build checks and uploads
+the debug APK and reports for successful CI runs.
 
-## Planned version 1 work
+## Current limitations
 
-1. Energy/envelope-based onset detection
-2. Detected-hit to expected-note matching
-3. Early, on-time, late, missed, and extra-hit judgements
-4. Hit-intensity measurement
-5. Immediate visual feedback
-6. Practice-session results
-
-Version 1 intentionally uses one generic rhythmic lane. Separate kick, snare,
-hi-hat, and tom lanes are future extensions.
+- Exercises use one generic rhythmic lane rather than separate drum voices.
+- Completed runs and production graphs are not yet persisted as history.
+- There is no progress tracking, cloud sync, AI coaching, or production audio
+  playback.
+- Calibration targets the phone speaker and built-in microphone path; changing
+  audio routes or acoustic conditions can change timing and detection quality.

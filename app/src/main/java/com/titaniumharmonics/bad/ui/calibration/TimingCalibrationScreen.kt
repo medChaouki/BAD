@@ -48,9 +48,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.titaniumharmonics.bad.BuildConfig
 import com.titaniumharmonics.bad.audio.calibration.CalibrationDiagnostics
+import com.titaniumharmonics.bad.audio.calibration.CalibrationFailureReason
 import com.titaniumharmonics.bad.audio.calibration.CalibrationPhase
 import com.titaniumharmonics.bad.audio.calibration.CalibrationRouteStatus
 import com.titaniumharmonics.bad.audio.calibration.TimingCalibration
+import com.titaniumharmonics.bad.audio.calibration.TimingCalibrationMath
 import com.titaniumharmonics.bad.audio.calibration.TimingCalibrationUiState
 import java.text.DateFormat
 import java.util.Date
@@ -254,6 +256,7 @@ fun TimingCalibrationScreen(
                 state.diagnostics?.let { diagnostics ->
                     CalibrationDebugDiagnostics(
                         diagnostics,
+                        state.failureReason,
                         onPlayDebugRecording,
                         onStopDebugRecording,
                     )
@@ -297,6 +300,7 @@ private fun CalibrationStatus(state: TimingCalibrationUiState) {
 @Composable
 private fun CalibrationDebugDiagnostics(
     diagnostics: CalibrationDiagnostics,
+    failureReason: CalibrationFailureReason?,
     onPlay: () -> Unit,
     onStop: () -> Unit,
 ) {
@@ -306,11 +310,18 @@ private fun CalibrationDebugDiagnostics(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text("Debug: Calibration diagnostics", fontWeight = FontWeight.Bold)
+            failureReason?.let { Text("Failure: ${it.name}") }
+            val medianCorrelation = diagnostics.matches
+                .map { (it.correlation * 1_000).toLong() }
+                .takeIf(List<Long>::isNotEmpty)
+                ?.let(TimingCalibrationMath::median)
+                ?.div(1_000.0)
             Text(
                 "Expected: ${diagnostics.expectedClickSamples.size} · " +
                     "Detected: ${diagnostics.matches.size}\n" +
                     "Median: ${diagnostics.medianOffsetSamples ?: "—"} samples · " +
-                    "Spread: ${diagnostics.offsetSpreadSamples ?: "—"} samples",
+                    "Spread: ${diagnostics.offsetSpreadSamples ?: "—"} samples\n" +
+                    "Median correlation: ${medianCorrelation ?: "—"}",
             )
             CalibrationWaveformGraph(diagnostics)
             diagnostics.matches.forEachIndexed { index, match ->

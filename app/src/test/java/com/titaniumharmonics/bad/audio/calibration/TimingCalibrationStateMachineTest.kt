@@ -97,6 +97,19 @@ class TimingCalibrationStateMachineTest {
     }
 
     @Test
+    fun nonPositiveRecalibrationFailurePreservesPreviousAndExposesNoPendingResult() {
+        val previous = calibration(10L)
+        val machine = TimingCalibrationStateMachine(previous)
+
+        machine.fail(CalibrationFailureReason.NON_POSITIVE_OFFSET)
+
+        assertEquals(CalibrationPhase.FAILED, machine.state.phase)
+        assertEquals(previous, machine.state.activeCalibration)
+        assertEquals(null, machine.state.pendingCalibration)
+        assertEquals(CalibrationFailureReason.NON_POSITIVE_OFFSET, machine.state.failureReason)
+    }
+
+    @Test
     fun activeAndIdleStatesAreNotFinishedButCancellationIs() {
         val machine = allowedMachine()
         assertFalse(machine.state.isFinished)
@@ -112,6 +125,13 @@ class TimingCalibrationStateMachineTest {
     }
 
     private fun calibration(offset: Long) = TimingCalibration(
-        offset, 48_000, CalibrationConfidence.HIGH, 8, 8, 0, 1, 1,
+        offset,
+        48_000,
+        CalibrationConfidence.HIGH,
+        8,
+        8,
+        0,
+        1,
+        TimingCalibrationConfig.CURRENT_ALGORITHM_VERSION,
     )
 }

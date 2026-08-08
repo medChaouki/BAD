@@ -102,6 +102,7 @@ class ImmutableFloatSeries private constructor(
 
     internal companion object {
         fun copyOf(values: FloatArray) = ImmutableFloatSeries(values.copyOf())
+        fun fromOwned(values: FloatArray) = ImmutableFloatSeries(values)
     }
 }
 
@@ -158,6 +159,8 @@ class AudioAnalysis(
     val metronomeConfiguration: MetronomeConfiguration,
     val expectedMetronomeExerciseSamples: ImmutableLongSeries,
     val maximumMetronomeSuppression: Float,
+    /** Full graded post-notch PCM retained for candidate-local FFT windows. */
+    val postNotchPcm: ImmutableFloatSeries,
 ) {
     init {
         require(sampleRateHz > 0)
@@ -165,6 +168,7 @@ class AudioAnalysis(
         require(frameSizeSamples > 0 && hopSizeSamples > 0)
         val count = frameCenterExerciseSamples.size
         require(count > 0)
+        require(postNotchPcm.size.toLong() == gradedSampleFrameCount)
         require(
             listOf(
                 representativeRawSamples.size,
