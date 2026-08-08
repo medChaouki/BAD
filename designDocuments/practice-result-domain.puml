@@ -59,6 +59,29 @@ class RuntimeExercise
 class ProductionGraphModel
 class TimingCalibration
 
+class ExerciseRun {
+  +runId: String
+  +startedAtEpochMillis: Long
+  +completedAtEpochMillis: Long
+  +exerciseNameSnapshot: String
+  +exerciseDurationMillis: Double
+  +expandedMeasureCount: Int
+  +appVersion: String
+  +schemaVersion: Int
+}
+
+class ExerciseRunSummary {
+  +runId: String
+  +exerciseId: String
+  +completedAtEpochMillis: Long
+  +bpm: Double
+  +accuracy: Double
+  +hitRate: Double
+  +signedMeanTimingErrorMillis: Double?
+  +missedCount: Int
+  +extraCount: Int
+}
+
 enum HitJudgement {
   EARLY
   ON_TIME
@@ -136,6 +159,9 @@ PracticeVerdictCalculator ..> SessionJudgementSnapshot : reads frozen thresholds
 PracticeVerdictCalculator ..> PracticeVerdict : returns
 PracticeResultReady *-- PracticeResult
 PracticeResultReady *-- ProductionGraphModel
+ExerciseRun "1" *-- "1" PracticeResult
+ExerciseRun "1" *-- "1" ProductionGraphModel
+ExerciseRun ..> ExerciseRunSummary : queryable projection
 
 note right of PracticeVerdict
   High-level timing tendency,
@@ -145,5 +171,11 @@ end note
 note bottom of SessionJudgementSnapshot
   Settings changes after session start
   cannot change the completed verdict.
+end note
+
+note bottom of ExerciseRun
+  Historical truth: runtime exercise, settings,
+  calibration, result, and graph are loaded from
+  the saved snapshot, never current mutable state.
 end note
 @enduml

@@ -58,6 +58,17 @@ state PROCESSING {
   FAILED --> MEASURING : retry result assembly
 }
 
+state "Completed-run save" as RUN_SAVE {
+  [*] --> NOT_SAVED
+  NOT_SAVED --> SAVING : complete result ready
+  SAVING --> SAVED : Room commit succeeds
+  SAVING --> SAVE_FAILED : persistence fails
+  SAVE_FAILED --> SAVING : explicit Retry save\n[same run ID and snapshots]
+  SAVED --> SAVED : repeated callback / retry ignored
+}
+
+PROCESSING -[dashed]-> RUN_SAVE : starts asynchronously when\nPracticeResultState.Ready
+
 note right of PROCESSING
   WEIGHING and MEASURING each have a
   1.5 s minimum visible duration.
@@ -67,5 +78,11 @@ end note
 note bottom of VERDICT
   EARLY, ON_TIME, LATE, MISSING, or CREATIVE.
   Verdict is visible for 900 ms.
+end note
+
+note right of RUN_SAVE
+  Save runs independently of verdict timing and
+  Results navigation. Partial, failed, and cancelled
+  sessions never enter this state machine.
 end note
 @enduml

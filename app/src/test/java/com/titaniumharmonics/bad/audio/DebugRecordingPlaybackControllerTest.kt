@@ -73,11 +73,28 @@ class DebugRecordingPlaybackControllerTest {
         val recording = recordedSessionFile()
         controller.setRecording(recording)
 
-        controller.deleteRecording()
+        assertTrue(controller.deleteRecording())
 
         assertFalse(File(recording.wavFilePath).exists())
         assertEquals(DebugRecordingPlaybackPhase.UNAVAILABLE, controller.state.phase)
         assertFalse(controller.state.canPlay)
+    }
+
+    @Test
+    fun cleanupFailureIsReportedWithoutDiscardingRecordingState() {
+        val controller = DebugRecordingPlaybackController(FakeRecordedAudioPlayer())
+        val recording = recordedSessionFile()
+        controller.setRecording(recording)
+        val path = File(recording.wavFilePath)
+        assertTrue(path.delete())
+        assertTrue(path.mkdir())
+        File(path, "still-in-use").writeText("keep")
+
+        assertFalse(controller.deleteRecording())
+        assertEquals(recording.wavFilePath, controller.state.filePath)
+
+        File(path, "still-in-use").delete()
+        path.delete()
     }
 
     @Test

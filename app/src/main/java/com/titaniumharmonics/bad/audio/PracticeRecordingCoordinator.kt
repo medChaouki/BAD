@@ -180,12 +180,17 @@ class PracticeRecordingCoordinator(
         phase = PracticeRecordingPhase.CANCELLED
     }
 
-    fun deleteCompletedSession() {
-        playbackController.deleteRecording()
+    fun deleteCompletedSession(): Boolean {
+        val session = completedSession
+        if (!playbackController.deleteRecording()) {
+            session?.let(playbackController::setRecording)
+            return false
+        }
         completedSession = null
         if (phase == PracticeRecordingPhase.COMPLETED) {
             phase = PracticeRecordingPhase.IDLE
         }
+        return true
     }
 
     fun release() {

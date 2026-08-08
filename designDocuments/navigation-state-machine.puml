@@ -29,6 +29,7 @@ SETTINGS --> PRACTICE : back
 TIMING_CALIBRATION --> PRACTICE : accept, reject, or back
 
 PROCESSING --> RESULTS : complete result + verdict delay
+[*] --> RESULTS : openSavedRun(runId) [debug/history entry]
 PROCESSING --> PROCESSING : system back ignored
 PROCESSING --> PRACTICE : unrecoverable finalization failure + tap
 
@@ -42,6 +43,7 @@ state RESULTS {
 
 RESULTS --> PRACTICE : back / Practice
 RESULTS --> PRACTICE : Retry (new recording)
+RESULTS --> PRACTICE : Retry saved [source exercise exists]
 RESULTS --> EXERCISE_LIBRARY : Exercise library
 
 note right of PROCESSING
@@ -50,7 +52,12 @@ note right of PROCESSING
 end note
 
 note right of RESULTS
-  PracticeResult and ProductionGraphModel
-  are held by AppUiState while Results is open.
+  ResultsPresentationState is Loading, Ready, or
+  LoadFailed. Ready holds the same presentation
+  model for current and saved runs. Navigation to
+  history carries only the run ID.
+
+  Saved-run Retry is disabled if the source
+  exercise ID no longer resolves in the library.
 end note
 @enduml

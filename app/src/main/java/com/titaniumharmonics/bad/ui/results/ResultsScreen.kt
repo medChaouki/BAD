@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.titaniumharmonics.bad.audio.result.PracticeResult
 import com.titaniumharmonics.bad.audio.result.ProductionGraphModel
+import com.titaniumharmonics.bad.history.ExerciseRunSaveState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,8 +33,11 @@ fun ResultsScreen(
     onOpenDetails: () -> Unit,
     onBack: () -> Unit,
     onRetry: () -> Unit,
+    retryEnabled: Boolean = true,
     onReturnToPractice: () -> Unit,
     onReturnToLibrary: () -> Unit,
+    saveState: ExerciseRunSaveState? = null,
+    onRetrySave: (() -> Unit)? = null,
     onOpenDebug: (() -> Unit)? = null,
 ) {
     Scaffold(
@@ -52,8 +56,11 @@ fun ResultsScreen(
                 graphModel = graphModel,
                 onOpenDetails = onOpenDetails,
                 onRetry = onRetry,
+                retryEnabled = retryEnabled,
                 onReturnToPractice = onReturnToPractice,
                 onReturnToLibrary = onReturnToLibrary,
+                saveState = saveState,
+                onRetrySave = onRetrySave,
                 onOpenDebug = onOpenDebug,
                 modifier = Modifier.padding(padding),
             )
@@ -67,8 +74,11 @@ private fun ResultOverview(
     graphModel: ProductionGraphModel,
     onOpenDetails: () -> Unit,
     onRetry: () -> Unit,
+    retryEnabled: Boolean,
     onReturnToPractice: () -> Unit,
     onReturnToLibrary: () -> Unit,
+    saveState: ExerciseRunSaveState?,
+    onRetrySave: (() -> Unit)?,
     onOpenDebug: (() -> Unit)?,
     modifier: Modifier,
 ) {
@@ -85,6 +95,9 @@ private fun ResultOverview(
         }
         item { ResultsSummary(result) }
         item { ProductionResultGraph(graphModel) }
+        saveState?.let { state ->
+            item { RunSaveIndicator(state, onRetrySave) }
+        }
         item { Button(onClick = onOpenDetails, modifier = Modifier.fillMaxWidth()) { Text("Detailed results") } }
         onOpenDebug?.let { openDebug ->
             item {
@@ -95,11 +108,70 @@ private fun ResultOverview(
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onRetry, modifier = Modifier.weight(1f)) { Text("Retry") }
+                OutlinedButton(
+                    onClick = onRetry,
+                    enabled = retryEnabled,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Retry") }
                 OutlinedButton(onClick = onReturnToPractice, modifier = Modifier.weight(1f)) { Text("Practice") }
             }
         }
         item { TextButton(onClick = onReturnToLibrary, modifier = Modifier.fillMaxWidth()) { Text("Exercise library") } }
+        if (!retryEnabled) {
+            item { Text("Source exercise is no longer available.") }
+        }
+    }
+}
+
+@Composable
+private fun RunSaveIndicator(
+    state: ExerciseRunSaveState,
+    onRetrySave: (() -> Unit)?,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            when (state) {
+                ExerciseRunSaveState.NotSaved -> "Not saved"
+                is ExerciseRunSaveState.Saving -> "Saving..."
+                is ExerciseRunSaveState.Saved -> "Saved"
+                is ExerciseRunSaveState.SaveFailed -> "Save failed"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
+        )
+        if (state is ExerciseRunSaveState.SaveFailed && onRetrySave != null) {
+            TextButton(onClick = onRetrySave) { Text("Retry save") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SavedRunLoadScreen(
+    message: String,
+    loading: Boolean,
+    onBack: () -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Practice results") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(if (loading) "Loading saved run..." else message)
+        }
     }
 }
 

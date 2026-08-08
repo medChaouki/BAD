@@ -9,6 +9,7 @@ import com.titaniumharmonics.bad.audio.result.PracticeResultState
 import com.titaniumharmonics.bad.audio.result.PracticeVerdict
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
+import com.titaniumharmonics.bad.history.ExerciseRunSaveState
 
 enum class PracticePhase {
     UNLOADED,
@@ -35,6 +36,7 @@ data class PracticeUiState(
     val hitDetection: HitDetectionState = HitDetectionState.NotStarted,
     val practiceResult: PracticeResultState = PracticeResultState.NotStarted,
     val practiceVerdict: PracticeVerdict? = null,
+    val runSaveState: ExerciseRunSaveState = ExerciseRunSaveState.NotSaved,
     val debugCsvExport: DebugCsvExportState = DebugCsvExportState.NotStarted,
     val debugRecording: DebugRecordingPlaybackState = DebugRecordingPlaybackState(),
     val errorMessage: String? = null,

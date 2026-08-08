@@ -12,10 +12,12 @@ import com.titaniumharmonics.bad.ui.practice.PracticeRoute
 import com.titaniumharmonics.bad.ui.practice.PracticeViewModel
 import com.titaniumharmonics.bad.ui.practice.DebugAnalysisRoute
 import com.titaniumharmonics.bad.ui.results.ResultsScreen
+import com.titaniumharmonics.bad.ui.results.SavedRunLoadScreen
 import com.titaniumharmonics.bad.ui.processing.ProcessingRoute
 import com.titaniumharmonics.bad.ui.calibration.TimingCalibrationRoute
 import com.titaniumharmonics.bad.ui.settings.SettingsRoute
 import com.titaniumharmonics.bad.BuildConfig
+import com.titaniumharmonics.bad.history.ExerciseRunSaveState
 
 @Composable
 fun BadApp(
@@ -25,7 +27,9 @@ fun BadApp(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     BackHandler(enabled = uiState.destination != AppDestination.PRACTICE) {
+        val results = uiState.resultsPresentation as? ResultsPresentationState.Ready
         if (uiState.destination == AppDestination.RESULTS &&
+            results?.model?.source == ResultsSource.CurrentRun &&
             !uiState.resultsDetailVisible && !uiState.resultsDebugVisible
         ) {
             practiceViewModel.prepareForNextRun()
@@ -93,41 +97,78 @@ fun BadApp(
             )
         }
         AppDestination.RESULTS -> {
-            val result = uiState.practiceResult
-            val graph = uiState.productionGraph
-            if (result == null || graph == null) {
-                LaunchedEffect(Unit) { viewModel.leaveResultsForPractice() }
-            } else if (BuildConfig.DEBUG && uiState.resultsDebugVisible) {
-                DebugAnalysisRoute(
-                    onNavigateBack = viewModel::navigateBack,
-                    viewModel = practiceViewModel,
+            val practiceUiState by practiceViewModel.uiState.collectAsStateWithLifecycle()
+            when (val presentation = uiState.resultsPresentation) {
+                ResultsPresentationState.None -> {
+                    LaunchedEffect(Unit) { viewModel.leaveResultsForPractice() }
+                }
+                is ResultsPresentationState.Loading -> SavedRunLoadScreen(
+                    message = "",
+                    loading = true,
+                    onBack = viewModel::navigateBack,
                 )
-            } else {
-                ResultsScreen(
-                    result = result,
-                    graphModel = graph,
-                    showDetails = uiState.resultsDetailVisible,
-                    onOpenDetails = viewModel::showResultDetails,
-                    onBack = {
-                        if (!uiState.resultsDetailVisible && !uiState.resultsDebugVisible) {
-                            practiceViewModel.prepareForNextRun()
+                is ResultsPresentationState.LoadFailed -> SavedRunLoadScreen(
+                    message = presentation.message,
+                    loading = false,
+                    onBack = viewModel::navigateBack,
+                )
+                is ResultsPresentationState.Ready -> {
+                    val model = presentation.model
+                    val currentRun = model.source == ResultsSource.CurrentRun
+                    if (BuildConfig.DEBUG && currentRun && uiState.resultsDebugVisible) {
+                        DebugAnalysisRoute(
+                            onNavigateBack = viewModel::navigateBack,
+                            viewModel = practiceViewModel,
+                        )
+                    } else {
+                        val saveState = when (val source = model.source) {
+                            ResultsSource.CurrentRun -> practiceUiState.runSaveState
+                            is ResultsSource.SavedRun -> ExerciseRunSaveState.Saved(source.runId)
                         }
-                        viewModel.navigateBack()
-                    },
-                    onRetry = {
-                        viewModel.leaveResultsForPractice()
-                        practiceViewModel.retryExercise()
-                    },
-                    onReturnToPractice = {
-                        practiceViewModel.prepareForNextRun()
-                        viewModel.leaveResultsForPractice()
-                    },
-                    onReturnToLibrary = {
-                        practiceViewModel.unloadExercise()
-                        viewModel.openExerciseLibraryForPractice()
-                    },
-                    onOpenDebug = if (BuildConfig.DEBUG) viewModel::showResultDebug else null,
-                )
+                        ResultsScreen(
+                            result = model.result,
+                            graphModel = model.graphModel,
+                            showDetails = uiState.resultsDetailVisible,
+                            onOpenDetails = viewModel::showResultDetails,
+                            onBack = {
+                                if (currentRun && !uiState.resultsDetailVisible &&
+                                    !uiState.resultsDebugVisible
+                                ) {
+                                    practiceViewModel.prepareForNextRun()
+                                }
+                                viewModel.navigateBack()
+                            },
+                            onRetry = {
+                                if (currentRun) {
+                                    viewModel.leaveResultsForPractice()
+                                    practiceViewModel.retryExercise()
+                                } else {
+                                    viewModel.retrySavedRun()
+                                }
+                            },
+                            retryEnabled = model.retryAvailable,
+                            onReturnToPractice = {
+                                if (currentRun) practiceViewModel.prepareForNextRun()
+                                viewModel.leaveResultsForPractice()
+                            },
+                            onReturnToLibrary = {
+                                practiceViewModel.unloadExercise()
+                                viewModel.openExerciseLibraryForPractice()
+                            },
+                            saveState = saveState,
+                            onRetrySave = if (currentRun) {
+                                practiceViewModel::retryRunSave
+                            } else {
+                                null
+                            },
+                            onOpenDebug = if (BuildConfig.DEBUG && currentRun) {
+                                viewModel::showResultDebug
+                            } else {
+                                null
+                            },
+                        )
+                    }
+                }
             }
         }
     }

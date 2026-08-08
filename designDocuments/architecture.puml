@@ -24,6 +24,7 @@ package "UI State" {
   [Settings ViewModels] as SettingsVM
   [AppUiState] as AppState
   [PracticeUiState] as PracticeState
+  [ResultsPresentationState] as ResultsState
 }
 
 package "Exercise and Timing" {
@@ -60,12 +61,23 @@ package "Configuration" {
 }
 
 package "Immutable Result Domain" {
+  [ExerciseRun] as ExerciseRun
   [PracticeResult] as PracticeResult
   [ProductionGraphModel] as GraphModel
   [SessionMetronomeSnapshot] as MetronomeSnapshot
   [SessionDetectionSnapshot] as DetectionSnapshot
   [SessionJudgementSnapshot] as JudgementSnapshot
   [PracticeVerdict] as Verdict
+}
+
+package "Run History Persistence" {
+  [ExerciseRunRepository] as RunRepository
+  [ExerciseRunFactory] as RunFactory
+  [ExerciseRunSaveCoordinator] as RunSaveCoordinator
+  [ExerciseRunMapper] as RunMapper
+  [ExerciseRunDao] as RunDao
+  database "Room exercise_runs" as RunDatabase
+  [Versioned JSON payload] as RunPayload
 }
 
 Player --> BadApp
@@ -78,6 +90,7 @@ BadApp --> ExerciseUI
 BadApp --> CalibrationUI
 
 AppVM --> AppState
+AppState o-- ResultsState
 PracticeUI --> PracticeVM
 ProcessingUI --> PracticeVM
 PracticeVM --> PracticeState
@@ -100,6 +113,10 @@ ResultProcessor --> Matcher
 ResultProcessor --> Assembler
 ResultProcessor --> GraphBuilder
 PracticeVM --> VerdictCalculator
+PracticeVM --> RunFactory
+PracticeVM --> RunSaveCoordinator
+RunSaveCoordinator --> RunRepository
+AppVM --> RunRepository : load by run ID
 
 PracticeVM --> MetronomeRepo
 PracticeVM --> DetectionRepo
@@ -125,6 +142,32 @@ PracticeResult o-- DetectionSnapshot
 PracticeResult o-- JudgementSnapshot
 ResultsUI --> PracticeResult
 ResultsUI --> GraphModel
+ResultsState *-- PracticeResult
+ResultsState *-- GraphModel
+ExerciseRun *-- PracticeResult
+ExerciseRun *-- GraphModel
+RunRepository --> ExerciseRun
+RunRepository --> RunMapper
+RunMapper <--> RunPayload
+RunRepository --> RunDao
+RunDao --> RunDatabase
+
+note right of ExerciseRun
+  Created once when the complete result and
+  compact graph become available. The UUID is
+  stable across save retry and repeated callbacks.
+end note
+
+note right of ResultsState
+  Current in-memory and repository-loaded runs
+  use the same Results presentation and screen.
+end note
+
+note right of RunDatabase
+  Queryable summaries are direct columns.
+  Immutable details use schema-versioned JSON.
+  No exercise foreign key or cascade delete.
+end note
 
 note right of RecordedSession
   Session configuration is frozen

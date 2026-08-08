@@ -1,0 +1,117 @@
+@startuml Exercise_Run_Persistence
+title B.A.D. - Exercise Run Persistence and Reopen Flow (PR 7.2)
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+hide empty methods
+
+package "Domain" {
+  class ExerciseRun {
+    +runId: String
+    +startedAtEpochMillis: Long
+    +completedAtEpochMillis: Long
+    +practiceResult: PracticeResult
+    +productionGraph: ProductionGraphModel
+    +appVersion: String
+    +schemaVersion: Int = 1
+  }
+  class ExerciseRunSummary
+  class ExerciseRunFactory
+  class ExerciseRunSaveCoordinator
+  interface ExerciseRunSaveState {
+    NotSaved
+    Saving(runId)
+    Saved(runId)
+    SaveFailed(runId, error)
+  }
+  class PracticeResult
+  class ProductionGraphModel
+  interface ExerciseRunRepository {
+    +saveRun(run)
+    +getRun(runId)
+    +observeRun(runId)
+    +observeRunsForExercise(exerciseId)
+    +observeAllRuns()
+    +deleteRun(runId)
+    +deleteRunsForExercise(exerciseId)
+  }
+  interface ExerciseRunPersistenceError
+}
+
+package "Persistence" {
+  class RoomExerciseRunRepository
+  class ExerciseRunMapper
+  class ExerciseRunPayloadCodec {
+    +CURRENT_SCHEMA_VERSION = 1
+    +MAXIMUM_PAYLOAD_BYTES = 1048576
+  }
+  class ExerciseRunEntity <<Room Entity>> {
+    +runId: String <<PK>>
+    +exerciseId: String <<index>>
+    +exerciseNameSnapshot: String
+    +completedAtEpochMillis: Long <<index>>
+    +bpm: Double
+    +accuracy: Double
+    +hitRate: Double
+    +signedMeanTimingErrorMillis: Double?
+    +missedCount: Int
+    +extraCount: Int
+    +runSchemaVersion: Int
+    +payloadJson: String
+  }
+  interface ExerciseRunDao <<Room DAO>>
+  class ExerciseRunDatabase <<Room Database v1>>
+  class VersionedPayloadDto <<JSON>>
+}
+
+ExerciseRun *-- PracticeResult
+ExerciseRun *-- ProductionGraphModel
+ExerciseRunRepository <|.. RoomExerciseRunRepository
+ExerciseRunFactory ..> ExerciseRun : exact completed-session mapping
+ExerciseRunSaveCoordinator --> ExerciseRunRepository
+ExerciseRunSaveCoordinator --> ExerciseRunSaveState
+RoomExerciseRunRepository --> ExerciseRunDao
+RoomExerciseRunRepository --> ExerciseRunMapper
+RoomExerciseRunRepository ..> ExerciseRunPersistenceError
+ExerciseRunMapper <--> ExerciseRun
+ExerciseRunMapper <--> ExerciseRunEntity
+ExerciseRunMapper --> ExerciseRunPayloadCodec
+ExerciseRunPayloadCodec <--> VersionedPayloadDto
+ExerciseRunDao --> ExerciseRunEntity
+ExerciseRunDatabase *-- ExerciseRunDao
+
+note right of ExerciseRunEntity
+  Summary columns support history and progress
+  queries without decoding payloadJson.
+
+  No foreign key to exercise documents:
+  exercise deletion never cascades to runs.
+end note
+
+note bottom of VersionedPayloadDto
+  Contains the runtime exercise, judged notes,
+  extras, statistics, configuration snapshots,
+  calibration metadata, and compact production graph.
+
+  Does not contain WAV/PCM or debug DSP layers.
+end note
+
+note bottom of ExerciseRunDatabase
+  Schema exports are committed.
+  Destructive migration is never enabled.
+  Invalid rows are decoded independently.
+end note
+
+note left of ExerciseRunSaveCoordinator
+  One staged immutable candidate per attempt.
+  Identical repeated IDs are idempotent.
+  Explicit retry keeps the same UUID and payload.
+end note
+
+note bottom of RoomExerciseRunRepository
+  Same ID + identical entity returns Saved.
+  Same ID + conflicting immutable payload fails.
+end note
+@enduml

@@ -19,6 +19,9 @@ participant HitMatcher as Matcher
 participant PracticeResultAssembler as Assembler
 participant ProductionGraphModelBuilder as GraphBuilder
 participant PracticeVerdictCalculator as VerdictCalculator
+participant ExerciseRunFactory as RunFactory
+participant ExerciseRunSaveCoordinator as SaveCoordinator
+participant ExerciseRunRepository as RunRepository
 participant ResultsScreen
 
 Player -> PracticeVM : completes exercise
@@ -62,12 +65,31 @@ deactivate Processor
 PracticeVM -> VerdictCalculator : calculate(result, frozen judgement snapshot)
 VerdictCalculator --> PracticeVM : EARLY / ON_TIME / LATE / MISSING / CREATIVE
 PracticeVM -> PracticeVM : PracticeResultState.Ready + verdict
+PracticeVM -> RunFactory : create(stable run ID, timestamps, result, graph)
+RunFactory --> PracticeVM : immutable ExerciseRun
+PracticeVM -> SaveCoordinator : stage(run) + save asynchronously
+SaveCoordinator -> RunRepository : saveRun(run) [IO]
+RunRepository --> SaveCoordinator : Saved / Failed
+SaveCoordinator --> PracticeVM : SAVED / SAVE_FAILED
 ProcessingRoute -> Player : AND YOU HAVE BEEN FOUND...\n<VERDICT>
 
 ... 900 ms ...
 ProcessingRoute -> AppVM : openResults(result, graph)
 AppVM -> ResultsScreen : destination = RESULTS
 ResultsScreen -> Player : summary, statistics, graph, details
+
+note over SaveCoordinator,ResultsScreen
+  Saving does not delay the verdict or Results.
+  Failure leaves the result visible; explicit Retry save
+  reuses the same run ID, snapshots, result, and graph.
+end note
+
+== Saved-run reopen path ==
+Player -> AppVM : openSavedRun(runId)
+AppVM -> RunRepository : getRun(runId) [IO]
+RunRepository --> AppVM : ExerciseRun / domain-safe error
+AppVM -> AppVM : map to shared ResultsPresentationModel\nresolve current exercise ID for Retry
+AppVM -> ResultsScreen : same result + graph presentation
 
 == Alternative failure and retry path ==
 PracticeVM -> ProcessingRoute : Failed(message)

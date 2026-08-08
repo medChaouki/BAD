@@ -24,6 +24,7 @@ class ExerciseLibraryItemTest {
             fileName = "library-counts.json",
         )
 
+        assertEquals(exercise.id, item.exerciseId)
         assertEquals(3, item.patternCount)
         assertEquals(8, item.expandedMeasureCount)
     }

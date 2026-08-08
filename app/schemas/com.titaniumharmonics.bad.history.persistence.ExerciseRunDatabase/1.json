@@ -1,0 +1,152 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "89821cac31c6fc372730b2b4868e585b",
+    "entities": [
+      {
+        "tableName": "exercise_runs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`run_id` TEXT NOT NULL, `exercise_id` TEXT NOT NULL, `exercise_name_snapshot` TEXT NOT NULL, `started_at_epoch_millis` INTEGER NOT NULL, `completed_at_epoch_millis` INTEGER NOT NULL, `bpm` REAL NOT NULL, `exercise_duration_millis` REAL NOT NULL, `expanded_measure_count` INTEGER NOT NULL, `total_expected_notes` INTEGER NOT NULL, `accuracy` REAL NOT NULL, `hit_rate` REAL NOT NULL, `mean_absolute_timing_error_millis` REAL, `signed_mean_timing_error_millis` REAL, `missed_count` INTEGER NOT NULL, `extra_count` INTEGER NOT NULL, `run_schema_version` INTEGER NOT NULL, `app_version` TEXT NOT NULL, `payload_json` TEXT NOT NULL, PRIMARY KEY(`run_id`))",
+        "fields": [
+          {
+            "fieldPath": "runId",
+            "columnName": "run_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exerciseId",
+            "columnName": "exercise_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exerciseNameSnapshot",
+            "columnName": "exercise_name_snapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "started_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completedAtEpochMillis",
+            "columnName": "completed_at_epoch_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bpm",
+            "columnName": "bpm",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exerciseDurationMillis",
+            "columnName": "exercise_duration_millis",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expandedMeasureCount",
+            "columnName": "expanded_measure_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalExpectedNotes",
+            "columnName": "total_expected_notes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accuracy",
+            "columnName": "accuracy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hitRate",
+            "columnName": "hit_rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "meanAbsoluteTimingErrorMillis",
+            "columnName": "mean_absolute_timing_error_millis",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "signedMeanTimingErrorMillis",
+            "columnName": "signed_mean_timing_error_millis",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "missedCount",
+            "columnName": "missed_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extraCount",
+            "columnName": "extra_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runSchemaVersion",
+            "columnName": "run_schema_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "appVersion",
+            "columnName": "app_version",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payload_json",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "run_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_exercise_runs_completed_at_epoch_millis",
+            "unique": false,
+            "columnNames": [
+              "completed_at_epoch_millis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_exercise_runs_completed_at_epoch_millis` ON `${TABLE_NAME}` (`completed_at_epoch_millis`)"
+          },
+          {
+            "name": "index_exercise_runs_exercise_id_completed_at_epoch_millis",
+            "unique": false,
+            "columnNames": [
+              "exercise_id",
+              "completed_at_epoch_millis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_exercise_runs_exercise_id_completed_at_epoch_millis` ON `${TABLE_NAME}` (`exercise_id`, `completed_at_epoch_millis`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '89821cac31c6fc372730b2b4868e585b')"
+    ]
+  }
+}

@@ -3,6 +3,38 @@ package com.titaniumharmonics.bad.ui
 import com.titaniumharmonics.bad.audio.calibration.TimingCalibration
 import com.titaniumharmonics.bad.audio.result.PracticeResult
 import com.titaniumharmonics.bad.audio.result.ProductionGraphModel
+import com.titaniumharmonics.bad.history.ExerciseRun
+
+sealed interface ResultsSource {
+    data object CurrentRun : ResultsSource
+    data class SavedRun(val runId: String) : ResultsSource
+}
+
+data class ResultsPresentationModel(
+    val result: PracticeResult,
+    val graphModel: ProductionGraphModel,
+    val source: ResultsSource,
+    val retryDocumentUri: String? = null,
+) {
+    val retryAvailable: Boolean
+        get() = source == ResultsSource.CurrentRun || retryDocumentUri != null
+}
+
+sealed interface ResultsPresentationState {
+    data object None : ResultsPresentationState
+    data class Loading(val runId: String) : ResultsPresentationState
+    data class Ready(val model: ResultsPresentationModel) : ResultsPresentationState
+    data class LoadFailed(val runId: String, val message: String) : ResultsPresentationState
+}
+
+internal fun ExerciseRun.toSavedResultsPresentation(
+    retryDocumentUri: String?,
+): ResultsPresentationModel = ResultsPresentationModel(
+    result = practiceResult,
+    graphModel = productionGraph,
+    source = ResultsSource.SavedRun(runId),
+    retryDocumentUri = retryDocumentUri,
+)
 
 enum class AppDestination {
     PRACTICE,
@@ -29,8 +61,7 @@ data class AppUiState(
     val defaultExerciseFolderUri: String? = null,
     val storageInitializationComplete: Boolean = false,
     val activeTimingCalibration: TimingCalibration? = null,
-    val practiceResult: PracticeResult? = null,
-    val productionGraph: ProductionGraphModel? = null,
+    val resultsPresentation: ResultsPresentationState = ResultsPresentationState.None,
     val resultsDetailVisible: Boolean = false,
     val resultsDebugVisible: Boolean = false,
 )
@@ -50,8 +81,7 @@ internal fun AppUiState.openExerciseLibrary(
     destination = AppDestination.EXERCISE_LIBRARY,
     exerciseLibraryPurpose = purpose,
     editorDocumentUri = null,
-    practiceResult = null,
-    productionGraph = null,
+    resultsPresentation = ResultsPresentationState.None,
     resultsDetailVisible = false,
     resultsDebugVisible = false,
 )
@@ -75,8 +105,7 @@ internal fun AppUiState.playEditorExercise(documentUri: String): AppUiState = co
     practiceDocumentUriToLoad = documentUri,
     startPracticeAfterLoad = true,
     editorDocumentUri = null,
-    practiceResult = null,
-    productionGraph = null,
+    resultsPresentation = ResultsPresentationState.None,
     resultsDetailVisible = false,
     resultsDebugVisible = false,
 )
@@ -90,16 +119,20 @@ internal fun AppUiState.openResults(
     graphModel: ProductionGraphModel,
 ): AppUiState = copy(
     destination = AppDestination.RESULTS,
-    practiceResult = result,
-    productionGraph = graphModel,
+    resultsPresentation = ResultsPresentationState.Ready(
+        ResultsPresentationModel(
+            result = result,
+            graphModel = graphModel,
+            source = ResultsSource.CurrentRun,
+        ),
+    ),
     resultsDetailVisible = false,
     resultsDebugVisible = false,
 )
 
 internal fun AppUiState.openProcessing(): AppUiState = copy(
     destination = AppDestination.PROCESSING,
-    practiceResult = null,
-    productionGraph = null,
+    resultsPresentation = ResultsPresentationState.None,
     resultsDetailVisible = false,
     resultsDebugVisible = false,
 )
@@ -122,8 +155,7 @@ internal fun AppUiState.navigateBack(): AppUiState = when (destination) {
     } else {
         copy(
             destination = AppDestination.PRACTICE,
-            practiceResult = null,
-            productionGraph = null,
+            resultsPresentation = ResultsPresentationState.None,
         )
     }
 }

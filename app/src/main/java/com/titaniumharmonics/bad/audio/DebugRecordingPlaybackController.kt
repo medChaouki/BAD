@@ -93,11 +93,15 @@ class DebugRecordingPlaybackController(
         }
     }
 
-    fun deleteRecording() {
+    fun deleteRecording(): Boolean {
         val filePath = state.filePath
         player.release()
-        if (filePath != null) File(filePath).delete()
+        if (filePath != null) {
+            val file = File(filePath)
+            if (file.exists() && !file.delete()) return false
+        }
         update(DebugRecordingPlaybackState())
+        return true
     }
 
     fun release() {

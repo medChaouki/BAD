@@ -13,6 +13,7 @@ import androidx.annotation.WorkerThread
 import java.io.File
 
 data class ExerciseLibraryItem(
+    val exerciseId: String,
     val documentUri: String,
     val fileName: String,
     val exerciseName: String,
@@ -24,6 +25,10 @@ data class ExerciseLibraryItem(
 interface ExerciseLibraryRepository {
     @WorkerThread
     fun loadExercises(): List<ExerciseLibraryItem>
+
+    @WorkerThread
+    fun findExercise(exerciseId: String): ExerciseLibraryItem? =
+        loadExercises().firstOrNull { it.exerciseId == exerciseId }
 
     @WorkerThread
     fun deleteExercise(documentUri: String)
@@ -165,6 +170,7 @@ internal fun EditableExercise.toLibraryItem(
     documentUri: String,
     fileName: String,
 ): ExerciseLibraryItem = ExerciseLibraryItem(
+    exerciseId = id,
     documentUri = documentUri,
     fileName = fileName,
     exerciseName = name,

@@ -11,6 +11,7 @@ class ExerciseLibraryViewModelTest {
     fun requestDeletion_selectsOnlyAnExercisePresentInTheValidatedLibrary() {
         val viewModel = ExerciseLibraryViewModel(FakeExerciseLibraryRepository())
         val exercise = ExerciseLibraryItem(
+            exerciseId = "valid-id",
             documentUri = "content://exercise/valid",
             fileName = "valid.json",
             exerciseName = "Valid exercise",

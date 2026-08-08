@@ -1,6 +1,7 @@
 package com.titaniumharmonics.bad.ui.practice
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.core.net.toUri
@@ -33,12 +34,21 @@ import com.titaniumharmonics.bad.audio.result.PracticeResultProcessingResult
 import com.titaniumharmonics.bad.audio.result.PracticeResultProcessor
 import com.titaniumharmonics.bad.audio.result.PracticeResultState
 import com.titaniumharmonics.bad.audio.result.PracticeVerdictCalculator
+import com.titaniumharmonics.bad.BuildConfig
 import com.titaniumharmonics.bad.exercise.ContentResolverExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExerciseCompilationResult
 import com.titaniumharmonics.bad.exercise.ExerciseCompiler
 import com.titaniumharmonics.bad.exercise.ExerciseDocumentStore
 import com.titaniumharmonics.bad.exercise.ExercisePlaybackSettings
 import com.titaniumharmonics.bad.exercise.RuntimeExercise
+import com.titaniumharmonics.bad.history.ExerciseRun
+import com.titaniumharmonics.bad.history.ExerciseRunFactory
+import com.titaniumharmonics.bad.history.ExerciseRunIdGenerator
+import com.titaniumharmonics.bad.history.ExerciseRunSaveCoordinator
+import com.titaniumharmonics.bad.history.ExerciseRunSaveState
+import com.titaniumharmonics.bad.history.ExerciseRunWavPolicy
+import com.titaniumharmonics.bad.history.canStartSave
+import com.titaniumharmonics.bad.history.persistence.RoomExerciseRunRepository
 import com.titaniumharmonics.bad.timing.AndroidMonotonicClock
 import com.titaniumharmonics.bad.timing.ExerciseTiming
 import com.titaniumharmonics.bad.timing.MonotonicClock
@@ -82,6 +92,11 @@ class PracticeViewModel(
     private val judgementConfigurationRepository = JudgementConfigurationRepository(
         SharedPreferencesJudgementConfigurationStore(application),
     )
+    private val exerciseRunRepository = RoomExerciseRunRepository.create(application)
+    private val exerciseRunFactory = ExerciseRunFactory(BuildConfig.VERSION_NAME)
+    private val exerciseRunIdGenerator = ExerciseRunIdGenerator.UUID
+    private val exerciseRunSaveCoordinator = ExerciseRunSaveCoordinator(exerciseRunRepository)
+    private val exerciseRunWavPolicy = ExerciseRunWavPolicy(BuildConfig.DEBUG)
 
     private val mutableUiState = MutableStateFlow(PracticeUiState())
     val uiState: StateFlow<PracticeUiState> = mutableUiState.asStateFlow()
@@ -93,6 +108,7 @@ class PracticeViewModel(
             val completedSession = state.recordedSession?.takeIf {
                 File(it.wavFilePath).isFile
             }
+            val readyResult = state.practiceResult as? PracticeResultState.Ready
             mutableUiState.value = state.copy(
                 recordedSession = completedSession,
                 audioAnalysis = if (completedSession == null) {
@@ -105,7 +121,7 @@ class PracticeViewModel(
                 } else {
                     state.hitDetection
                 },
-                practiceResult = if (completedSession == null) {
+                practiceResult = if (completedSession == null && readyResult == null) {
                     PracticeResultState.NotStarted
                 } else {
                     state.practiceResult
@@ -130,9 +146,14 @@ class PracticeViewModel(
     private var debugPositionJob: Job? = null
     private var audioAnalysisJob: Job? = null
     private var practiceResultJob: Job? = null
+    private val runSaveJobs = mutableMapOf<String, Job>()
     private var csvExportJob: Job? = null
     private var phaseBeforePause: PracticePhase = PracticePhase.RUNNING
     private var activeMetronomeSnapshot: SessionMetronomeSnapshot? = null
+    private var activeRunId: String? = null
+    private var activeRunStartedAtEpochMillis: Long? = null
+    private var activeRunCompletedAtEpochMillis: Long? = null
+    private var completedExerciseRun: ExerciseRun? = null
 
     fun loadExercise(documentUri: String) {
         if (loadJob?.isActive == true) return
@@ -231,6 +252,10 @@ class PracticeViewModel(
             configuration = judgementConfigurationRepository.load(),
         )
         activeMetronomeSnapshot = metronomeSnapshot
+        activeRunId = exerciseRunIdGenerator.newRunId()
+        activeRunStartedAtEpochMillis = null
+        activeRunCompletedAtEpochMillis = null
+        completedExerciseRun = null
 
         val timing = ExerciseTiming(exercise)
         val progressCalculator = SessionProgressCalculator(timing)
@@ -243,6 +268,7 @@ class PracticeViewModel(
             audioAnalysis = AudioAnalysisState.NotStarted,
             hitDetection = HitDetectionState.NotStarted,
             practiceResult = PracticeResultState.NotStarted,
+            runSaveState = ExerciseRunSaveState.NotSaved,
             debugCsvExport = DebugCsvExportState.NotStarted,
             errorMessage = null,
         )
@@ -267,6 +293,7 @@ class PracticeViewModel(
                         configuration = metronomeSnapshot.configuration,
                     )
                 }
+                activeRunStartedAtEpochMillis = System.currentTimeMillis()
                 sessionElapsedClock.start(playbackStartedNanos)
 
                 while (isActive) {
@@ -294,6 +321,7 @@ class PracticeViewModel(
 
                     if (progress.phase == PlaybackPhase.COMPLETED) {
                         completedNormally = true
+                        activeRunCompletedAtEpochMillis = System.currentTimeMillis()
                         mutableUiState.value = mutableUiState.value.copy(
                             phase = PracticePhase.PROCESSING,
                         )
@@ -775,23 +803,90 @@ class PracticeViewModel(
             )
             coroutineContext.ensureActive()
             if (mutableUiState.value.recordedSession !== recordedSession) return@launch
-            mutableUiState.value = when (processed) {
-                is PracticeResultProcessingResult.Success -> mutableUiState.value.copy(
-                    practiceResult = PracticeResultState.Ready(
-                        processed.result,
-                        processed.graphModel,
-                    ),
-                    practiceVerdict = PracticeVerdictCalculator.calculate(
-                        processed.result,
-                        recordedSession.judgementSnapshot,
-                    ),
-                )
-                is PracticeResultProcessingResult.Failure -> mutableUiState.value.copy(
-                    practiceResult = PracticeResultState.Failed(processed.reason.userMessage),
-                    practiceVerdict = null,
-                )
+            when (processed) {
+                is PracticeResultProcessingResult.Success -> {
+                    val completedAt = activeRunCompletedAtEpochMillis ?: System.currentTimeMillis()
+                    val run = completedExerciseRun ?: exerciseRunFactory.create(
+                        runId = checkNotNull(activeRunId) { "Completed attempt has no run ID." },
+                        startedAtEpochMillis = activeRunStartedAtEpochMillis ?: completedAt,
+                        completedAtEpochMillis = completedAt,
+                        practiceResult = processed.result,
+                        productionGraph = processed.graphModel,
+                    ).also { completedExerciseRun = it }
+                    val stagedSaveState = exerciseRunSaveCoordinator.stage(run)
+                    mutableUiState.value = mutableUiState.value.copy(
+                        practiceResult = PracticeResultState.Ready(
+                            processed.result,
+                            processed.graphModel,
+                        ),
+                        practiceVerdict = PracticeVerdictCalculator.calculate(
+                            processed.result,
+                            recordedSession.judgementSnapshot,
+                        ),
+                        runSaveState = stagedSaveState,
+                    )
+                    saveCompletedRun(run, recordedSession)
+                }
+                is PracticeResultProcessingResult.Failure -> {
+                    mutableUiState.value = mutableUiState.value.copy(
+                        practiceResult = PracticeResultState.Failed(processed.reason.userMessage),
+                        practiceVerdict = null,
+                        runSaveState = ExerciseRunSaveState.NotSaved,
+                    )
+                }
             }
         }
+    }
+
+    private fun saveCompletedRun(
+        run: ExerciseRun,
+        recordedSession: com.titaniumharmonics.bad.audio.RecordedSession?,
+    ) {
+        val state = mutableUiState.value.runSaveState
+        if (!state.canStartSave(run.runId) || runSaveJobs[run.runId]?.isActive == true) return
+        mutableUiState.value = mutableUiState.value.copy(
+            runSaveState = ExerciseRunSaveState.Saving(run.runId),
+        )
+        runSaveJobs[run.runId] = viewModelScope.launch {
+            when (val saved = exerciseRunSaveCoordinator.save()) {
+                is ExerciseRunSaveState.Saved -> {
+                    if (completedExerciseRun?.runId == run.runId) {
+                        mutableUiState.value = mutableUiState.value.copy(
+                            runSaveState = ExerciseRunSaveState.Saved(run.runId),
+                        )
+                        if (exerciseRunWavPolicy.shouldDelete(persistenceSucceeded = true) &&
+                            recordedSession != null &&
+                            mutableUiState.value.recordedSession === recordedSession
+                        ) {
+                            val deleted = withContext(Dispatchers.IO) {
+                                practiceRecordingCoordinator.deleteCompletedSession()
+                            }
+                            if (!deleted) {
+                                Log.w(TAG, "Run ${run.runId} saved, but temporary WAV cleanup failed.")
+                            }
+                        }
+                    }
+                }
+                is ExerciseRunSaveState.SaveFailed -> {
+                    if (completedExerciseRun?.runId == run.runId) {
+                        mutableUiState.value = mutableUiState.value.copy(
+                            runSaveState = ExerciseRunSaveState.SaveFailed(
+                                run.runId,
+                                saved.error,
+                            ),
+                        )
+                    }
+                }
+                ExerciseRunSaveState.NotSaved,
+                is ExerciseRunSaveState.Saving,
+                -> Unit
+            }
+        }
+    }
+
+    fun retryRunSave() {
+        val run = completedExerciseRun ?: return
+        saveCompletedRun(run, mutableUiState.value.recordedSession)
     }
 
     fun retryProcessing() {
@@ -813,6 +908,11 @@ class PracticeViewModel(
         debugPositionJob?.cancel()
         clearAudioAnalysis()
         practiceRecordingCoordinator.deleteCompletedSession()
+        activeRunId = null
+        activeRunStartedAtEpochMillis = null
+        activeRunCompletedAtEpochMillis = null
+        completedExerciseRun = null
+        exerciseRunSaveCoordinator.reset()
         val state = mutableUiState.value
         val exercise = state.playbackExercise
         val timing = exercise?.let(::ExerciseTiming)
@@ -825,6 +925,7 @@ class PracticeViewModel(
             hitDetection = HitDetectionState.NotStarted,
             practiceResult = PracticeResultState.NotStarted,
             practiceVerdict = null,
+            runSaveState = ExerciseRunSaveState.NotSaved,
             debugCsvExport = DebugCsvExportState.NotStarted,
             debugRecording = debugRecordingController.state,
             errorMessage = null,
@@ -846,6 +947,7 @@ class PracticeViewModel(
         audioAnalysisJob?.cancel()
         practiceResultJob?.cancel()
         csvExportJob?.cancel()
+        runSaveJobs.values.forEach(Job::cancel)
         practiceRecordingCoordinator.release()
         metronomePlayer.stop()
         super.onCleared()
@@ -902,6 +1004,7 @@ class PracticeViewModel(
     )
 
     private companion object {
+        const val TAG = "PracticeViewModel"
         const val RUN_STARTUP_DELAY_MILLIS = 2_000L
         const val UI_UPDATE_INTERVAL_MILLIS = 16L
         const val DEBUG_POSITION_UPDATE_INTERVAL_MILLIS = 50L

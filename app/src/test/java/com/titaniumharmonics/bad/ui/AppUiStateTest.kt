@@ -5,8 +5,10 @@ import com.titaniumharmonics.bad.audio.calibration.TimingCalibration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.titaniumharmonics.bad.history.persistence.exerciseRunFixture
 
 class AppUiStateTest {
     @Test
@@ -44,7 +46,7 @@ class AppUiStateTest {
 
         val practice = summary.navigateBack()
         assertEquals(AppDestination.PRACTICE, practice.destination)
-        assertNull(practice.practiceResult)
+        assertEquals(ResultsPresentationState.None, practice.resultsPresentation)
     }
 
     @Test
@@ -103,6 +105,31 @@ class AppUiStateTest {
     fun timingCalibrationIsDedicatedDestinationAndReturnsToPractice() {
         val calibrationState = AppUiState(destination = AppDestination.TIMING_CALIBRATION)
         assertEquals(AppDestination.TIMING_CALIBRATION, calibrationState.destination)
+    }
+
+    @Test
+    fun currentAndHistoricalRunsShareOneResultsPresentationModel() {
+        val run = exerciseRunFixture(runId = "presentation-run")
+        val current = AppUiState().openResults(run.practiceResult, run.productionGraph)
+        val currentModel = (current.resultsPresentation as ResultsPresentationState.Ready).model
+        assertEquals(ResultsSource.CurrentRun, currentModel.source)
+        assertTrue(currentModel.retryAvailable)
+
+        val historicalModel = currentModel.copy(
+            source = ResultsSource.SavedRun(run.runId),
+            retryDocumentUri = null,
+        )
+        assertEquals(run.practiceResult, historicalModel.result)
+        assertEquals(run.productionGraph, historicalModel.graphModel)
+        assertFalse(historicalModel.retryAvailable)
+
+        val loaded = run.toSavedResultsPresentation(
+            retryDocumentUri = "content://exercise/current",
+        )
+        assertSame(run.practiceResult, loaded.result)
+        assertSame(run.productionGraph, loaded.graphModel)
+        assertEquals(ResultsSource.SavedRun(run.runId), loaded.source)
+        assertTrue(loaded.retryAvailable)
     }
 
     @Test
