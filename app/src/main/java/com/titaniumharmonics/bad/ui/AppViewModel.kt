@@ -75,6 +75,11 @@ class AppViewModel(
         mutableUiState.value = mutableUiState.value.openLibraryExercise(documentUri)
     }
 
+    fun openExerciseHistory(exerciseId: String) {
+        if (exerciseId.isBlank()) return
+        mutableUiState.value = mutableUiState.value.openExerciseHistory(exerciseId)
+    }
+
     fun consumePracticeDocumentToLoad() {
         mutableUiState.value = mutableUiState.value.copy(
             practiceDocumentUriToLoad = null,
@@ -102,6 +107,14 @@ class AppViewModel(
     }
 
     fun openSavedRun(runId: String) {
+        openSavedRun(runId, AppDestination.PRACTICE)
+    }
+
+    fun openSavedRunFromHistory(runId: String) {
+        openSavedRun(runId, AppDestination.EXERCISE_HISTORY)
+    }
+
+    private fun openSavedRun(runId: String, returnDestination: AppDestination) {
         savedRunLoadJob?.cancel()
         if (runId.isBlank()) {
             mutableUiState.value = mutableUiState.value.copy(
@@ -110,6 +123,7 @@ class AppViewModel(
                     runId,
                     "The saved run ID is invalid.",
                 ),
+                resultsReturnDestination = returnDestination,
                 resultsDetailVisible = false,
                 resultsDebugVisible = false,
             )
@@ -118,6 +132,7 @@ class AppViewModel(
         mutableUiState.value = mutableUiState.value.copy(
             destination = AppDestination.RESULTS,
             resultsPresentation = ResultsPresentationState.Loading(runId),
+            resultsReturnDestination = returnDestination,
             resultsDetailVisible = false,
             resultsDebugVisible = false,
         )
@@ -162,6 +177,7 @@ class AppViewModel(
             practiceDocumentUriToLoad = documentUri,
             startPracticeAfterLoad = true,
             resultsPresentation = ResultsPresentationState.None,
+            resultsReturnDestination = AppDestination.PRACTICE,
             resultsDetailVisible = false,
             resultsDebugVisible = false,
         )

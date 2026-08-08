@@ -138,9 +138,13 @@ class ExerciseRunCreationTest {
 
         override fun observeRunSummariesForExercise(
             exerciseId: String,
-        ): Flow<List<ExerciseRunSummary>> = flowOf(emptyList())
+        ): Flow<ExerciseRunSummaryCollection> = flowOf(
+            ExerciseRunSummaryCollection(emptyList()),
+        )
 
-        override fun observeAllRunSummaries(): Flow<List<ExerciseRunSummary>> = flowOf(emptyList())
+        override fun observeAllRunSummaries(): Flow<ExerciseRunSummaryCollection> = flowOf(
+            ExerciseRunSummaryCollection(emptyList()),
+        )
 
         override suspend fun deleteRun(runId: String): ExerciseRunDeleteResult =
             ExerciseRunDeleteResult.Deleted

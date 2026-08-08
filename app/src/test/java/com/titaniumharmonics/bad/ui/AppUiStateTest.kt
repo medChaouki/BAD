@@ -133,6 +133,23 @@ class AppUiStateTest {
     }
 
     @Test
+    fun libraryHistoryAndSavedResultsPreserveBackNavigation() {
+        val history = AppUiState(
+            destination = AppDestination.EXERCISE_LIBRARY,
+        ).openExerciseHistory("exercise-id")
+
+        assertEquals(AppDestination.EXERCISE_HISTORY, history.destination)
+        assertEquals("exercise-id", history.historyExerciseId)
+        assertEquals(AppDestination.EXERCISE_LIBRARY, history.navigateBack().destination)
+
+        val savedResults = history.copy(
+            destination = AppDestination.RESULTS,
+            resultsReturnDestination = AppDestination.EXERCISE_HISTORY,
+        )
+        assertEquals(AppDestination.EXERCISE_HISTORY, savedResults.navigateBack().destination)
+    }
+
+    @Test
     fun selectingExerciseForPractice_returnsToPracticeWithDocumentToLoad() {
         val libraryState = AppUiState().openExerciseLibrary(
             ExerciseLibraryPurpose.PRACTICE,

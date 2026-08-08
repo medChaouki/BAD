@@ -1,5 +1,5 @@
 @startuml Exercise_Run_Persistence
-title B.A.D. - Exercise Run Persistence and Reopen Flow (PR 7.2)
+title B.A.D. - Exercise Run Persistence, History, and Reopen Flow (PR 7.3)
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -18,6 +18,13 @@ package "Domain" {
     +schemaVersion: Int = 1
   }
   class ExerciseRunSummary
+  class ExerciseHistoryViewModel
+  interface ExerciseHistoryUiState {
+    Loading
+    Ready
+    Empty
+    Error
+  }
   class ExerciseRunFactory
   class ExerciseRunSaveCoordinator
   interface ExerciseRunSaveState {
@@ -34,6 +41,8 @@ package "Domain" {
     +observeRun(runId)
     +observeRunsForExercise(exerciseId)
     +observeAllRuns()
+    +observeRunSummariesForExercise(exerciseId)
+    +observeAllRunSummaries()
     +deleteRun(runId)
     +deleteRunsForExercise(exerciseId)
   }
@@ -72,6 +81,9 @@ ExerciseRunRepository <|.. RoomExerciseRunRepository
 ExerciseRunFactory ..> ExerciseRun : exact completed-session mapping
 ExerciseRunSaveCoordinator --> ExerciseRunRepository
 ExerciseRunSaveCoordinator --> ExerciseRunSaveState
+ExerciseHistoryViewModel --> ExerciseRunRepository : summary Flow / delete
+ExerciseHistoryViewModel --> ExerciseHistoryUiState
+ExerciseHistoryUiState *-- ExerciseRunSummary
 RoomExerciseRunRepository --> ExerciseRunDao
 RoomExerciseRunRepository --> ExerciseRunMapper
 RoomExerciseRunRepository ..> ExerciseRunPersistenceError
@@ -113,5 +125,8 @@ end note
 note bottom of RoomExerciseRunRepository
   Same ID + identical entity returns Saved.
   Same ID + conflicting immutable payload fails.
+
+  Summary queries select direct columns only, so
+  corrupt payloadJson does not block list rendering.
 end note
 @enduml

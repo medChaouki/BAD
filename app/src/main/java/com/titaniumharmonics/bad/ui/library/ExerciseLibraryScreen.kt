@@ -7,6 +7,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -44,6 +45,7 @@ fun ExerciseLibraryRoute(
     defaultExerciseFolderUri: String?,
     purpose: ExerciseLibraryPurpose,
     onOpenExercise: (String) -> Unit,
+    onOpenHistory: (String) -> Unit,
     onNavigateBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -70,6 +72,7 @@ fun ExerciseLibraryRoute(
         uiState = uiState,
         purpose = purpose,
         onOpenExercise = { exercise -> onOpenExercise(exercise.documentUri) },
+        onOpenHistory = { exercise -> onOpenHistory(exercise.exerciseId) },
         onRequestDeletion = { exercise ->
             viewModel.requestDeletion(exercise.documentUri)
         },
@@ -93,6 +96,7 @@ private fun ExerciseLibraryScreen(
     uiState: ExerciseLibraryUiState,
     purpose: ExerciseLibraryPurpose,
     onOpenExercise: (ExerciseLibraryItem) -> Unit,
+    onOpenHistory: (ExerciseLibraryItem) -> Unit,
     onRequestDeletion: (ExerciseLibraryItem) -> Unit,
     onCancelDeletion: () -> Unit,
     onConfirmDeletion: () -> Unit,
@@ -136,6 +140,7 @@ private fun ExerciseLibraryScreen(
             ExerciseLibraryList(
                 uiState = uiState,
                 onOpenExercise = onOpenExercise,
+                onOpenHistory = onOpenHistory,
                 onRequestDeletion = onRequestDeletion,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -197,6 +202,7 @@ private fun ExerciseLibraryScreen(
 private fun ExerciseLibraryList(
     uiState: ExerciseLibraryUiState,
     onOpenExercise: (ExerciseLibraryItem) -> Unit,
+    onOpenHistory: (ExerciseLibraryItem) -> Unit,
     onRequestDeletion: (ExerciseLibraryItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -226,6 +232,7 @@ private fun ExerciseLibraryList(
                     ExerciseLibraryCard(
                         exercise = exercise,
                         onOpen = { onOpenExercise(exercise) },
+                        onHistory = { onOpenHistory(exercise) },
                         onLongPress = { onRequestDeletion(exercise) },
                     )
                 }
@@ -239,6 +246,7 @@ private fun ExerciseLibraryList(
 private fun ExerciseLibraryCard(
     exercise: ExerciseLibraryItem,
     onOpen: () -> Unit,
+    onHistory: () -> Unit,
     onLongPress: () -> Unit,
 ) {
     Card(
@@ -270,6 +278,12 @@ private fun ExerciseLibraryCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onHistory) { Text("History") }
+            }
         }
     }
 }

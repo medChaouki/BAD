@@ -1,0 +1,65 @@
+@startuml Exercise_History
+title B.A.D. - Per-Exercise History Flow (PR 7.3)
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor Player
+
+package "Compose" {
+  [Exercise Library Card] as Library
+  [ExerciseHistoryScreen] as History
+  [Existing ResultsScreen] as Results
+}
+
+package "Presentation" {
+  [AppUiState] as Navigation
+  [ExerciseHistoryViewModel] as HistoryVM
+  [Loading / Ready / Empty / Error] as HistoryState
+  [BPM Filter + Deterministic Sort] as SortFilter
+}
+
+package "History Domain and Persistence" {
+  [ExerciseRunRepository] as Repository
+  [ExerciseRunSummary] as Summary
+  [ExerciseRun] as Run
+  [Room summary projection] as Query
+  database "exercise_runs" as Database
+}
+
+Player --> Library : History
+Library --> Navigation : exerciseId only
+Navigation --> History
+History --> HistoryVM
+HistoryVM --> Repository : observeRunSummariesForExercise(exerciseId)
+Repository --> Query
+Query --> Database : direct summary columns; no payload_json
+Query --> Summary
+Summary --> HistoryState
+HistoryState --> SortFilter
+SortFilter --> History : lazy rows, stable runId keys
+
+Player --> History : filter / sort
+Player --> History : confirm delete
+HistoryVM --> Repository : deleteRun(runId)
+Repository --> Database
+Database --> HistoryVM : reactive summary update
+
+Player --> History : open row
+History --> Navigation : runId only
+Navigation --> Repository : getRun(runId)
+Repository --> Run : decode details once
+Run --> Results : shared Results presentation
+Results --> Navigation : back to same history
+
+note bottom of Database
+  Exercise documents are not foreign-key parents.
+  Deleting an exercise never cascades to runs.
+end note
+
+note bottom of Results
+  Retry resolves the current exercise. Deleted
+  exercises leave history viewable but disable Retry.
+end note
+@enduml

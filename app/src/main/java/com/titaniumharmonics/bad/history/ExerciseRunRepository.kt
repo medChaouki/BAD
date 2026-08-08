@@ -42,6 +42,13 @@ class ExerciseRunCollection(
     val failures: List<ExerciseRunPersistenceError> = failures.toList()
 }
 
+class ExerciseRunSummaryCollection(
+    summaries: List<ExerciseRunSummary>,
+    val failure: ExerciseRunPersistenceError? = null,
+) {
+    val summaries: List<ExerciseRunSummary> = summaries.toList()
+}
+
 sealed interface ExerciseRunDeleteResult {
     data object Deleted : ExerciseRunDeleteResult
     data class Failed(val error: ExerciseRunPersistenceError) : ExerciseRunDeleteResult
@@ -53,8 +60,8 @@ interface ExerciseRunRepository {
     fun observeRun(runId: String): Flow<ExerciseRunLoadResult>
     fun observeRunsForExercise(exerciseId: String): Flow<ExerciseRunCollection>
     fun observeAllRuns(): Flow<ExerciseRunCollection>
-    fun observeRunSummariesForExercise(exerciseId: String): Flow<List<ExerciseRunSummary>>
-    fun observeAllRunSummaries(): Flow<List<ExerciseRunSummary>>
+    fun observeRunSummariesForExercise(exerciseId: String): Flow<ExerciseRunSummaryCollection>
+    fun observeAllRunSummaries(): Flow<ExerciseRunSummaryCollection>
     suspend fun deleteRun(runId: String): ExerciseRunDeleteResult
     suspend fun deleteRunsForExercise(exerciseId: String): ExerciseRunDeleteResult
 }

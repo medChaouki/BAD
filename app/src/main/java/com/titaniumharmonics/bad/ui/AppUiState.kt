@@ -39,6 +39,7 @@ internal fun ExerciseRun.toSavedResultsPresentation(
 enum class AppDestination {
     PRACTICE,
     EXERCISE_LIBRARY,
+    EXERCISE_HISTORY,
     EXERCISE_EDITOR,
     SETTINGS,
     TIMING_CALIBRATION,
@@ -58,10 +59,13 @@ data class AppUiState(
     val startPracticeAfterLoad: Boolean = false,
     val editorDocumentUri: String? = null,
     val editorReturnDestination: AppDestination = AppDestination.PRACTICE,
+    val historyExerciseId: String? = null,
+    val historyReturnDestination: AppDestination = AppDestination.EXERCISE_LIBRARY,
     val defaultExerciseFolderUri: String? = null,
     val storageInitializationComplete: Boolean = false,
     val activeTimingCalibration: TimingCalibration? = null,
     val resultsPresentation: ResultsPresentationState = ResultsPresentationState.None,
+    val resultsReturnDestination: AppDestination = AppDestination.PRACTICE,
     val resultsDetailVisible: Boolean = false,
     val resultsDebugVisible: Boolean = false,
 )
@@ -126,6 +130,7 @@ internal fun AppUiState.openResults(
             source = ResultsSource.CurrentRun,
         ),
     ),
+    resultsReturnDestination = AppDestination.PRACTICE,
     resultsDetailVisible = false,
     resultsDebugVisible = false,
 )
@@ -137,9 +142,19 @@ internal fun AppUiState.openProcessing(): AppUiState = copy(
     resultsDebugVisible = false,
 )
 
+internal fun AppUiState.openExerciseHistory(exerciseId: String): AppUiState = copy(
+    destination = AppDestination.EXERCISE_HISTORY,
+    historyExerciseId = exerciseId,
+    historyReturnDestination = AppDestination.EXERCISE_LIBRARY,
+    resultsPresentation = ResultsPresentationState.None,
+    resultsDetailVisible = false,
+    resultsDebugVisible = false,
+)
+
 internal fun AppUiState.navigateBack(): AppUiState = when (destination) {
     AppDestination.PRACTICE -> this
     AppDestination.EXERCISE_LIBRARY -> copy(destination = AppDestination.PRACTICE)
+    AppDestination.EXERCISE_HISTORY -> copy(destination = historyReturnDestination)
     AppDestination.EXERCISE_EDITOR -> copy(
         destination = editorReturnDestination,
         editorDocumentUri = null,
@@ -154,7 +169,7 @@ internal fun AppUiState.navigateBack(): AppUiState = when (destination) {
         copy(resultsDebugVisible = false)
     } else {
         copy(
-            destination = AppDestination.PRACTICE,
+            destination = resultsReturnDestination,
             resultsPresentation = ResultsPresentationState.None,
         )
     }

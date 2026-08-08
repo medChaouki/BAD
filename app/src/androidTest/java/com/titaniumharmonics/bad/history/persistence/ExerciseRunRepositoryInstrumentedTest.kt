@@ -48,7 +48,7 @@ class ExerciseRunRepositoryInstrumentedTest {
             run,
             (repository.observeRun(run.runId).first() as ExerciseRunLoadResult.Found).run,
         )
-        val summary = repository.observeAllRunSummaries().first().single()
+        val summary = repository.observeAllRunSummaries().first().summaries.single()
         assertEquals(run.runId, summary.runId)
         assertEquals(run.practiceResult.accuracy, summary.accuracy, 0.0)
     }
@@ -74,6 +74,43 @@ class ExerciseRunRepositoryInstrumentedTest {
             repository.deleteRunsForExercise("exercise-a"),
         )
         assertEquals(listOf(other.runId), repository.observeAllRuns().first().runs.map { it.runId })
+    }
+
+    @Test
+    fun historySummaryQueryIsLightweightScopedOrderedAndSupportsLargeHistories() = runBlocking {
+        val exerciseAEntities: List<ExerciseRunEntity> = (0 until 250).map { index ->
+            val entity = ExerciseRunMapper.toEntity(
+                androidExerciseRunFixture(
+                    runId = "history-$index",
+                    exerciseId = "exercise-a",
+                    completedAt = index.toLong() + 1L,
+                ),
+            )
+            val bpm = if (index % 2 == 0) 80.0 else 120.0
+            entity.copy(bpm = bpm)
+        }
+        exerciseAEntities.forEach { entity ->
+            database.exerciseRunDao().insert(
+                if (entity.runId == "history-249") {
+                    entity.copy(payloadJson = "{corrupted")
+                } else {
+                    entity
+                },
+            )
+        }
+        repository.saveRun(androidExerciseRunFixture("other", "exercise-b", 999L))
+
+        val summaries = repository.observeRunSummariesForExercise("exercise-a").first()
+        val empty = repository.observeRunSummariesForExercise("missing").first()
+
+        assertEquals(null, summaries.failure)
+        assertEquals(250, summaries.summaries.size)
+        assertEquals("history-249", summaries.summaries.first().runId)
+        assertEquals("history-0", summaries.summaries.last().runId)
+        assertEquals(setOf(80.0, 120.0), summaries.summaries.map { it.bpm }.toSet())
+        assertTrue(summaries.summaries.all { it.exerciseId == "exercise-a" })
+        assertTrue(empty.summaries.isEmpty())
+        assertEquals(null, empty.failure)
     }
 
     @Test
@@ -148,8 +185,13 @@ class ExerciseRunRepositoryInstrumentedTest {
         ).build()
         diskRepository = RoomExerciseRunRepository(diskDatabase.exerciseRunDao())
         val loaded = (diskRepository.getRun(run.runId) as ExerciseRunLoadResult.Found).run
+        val orphanSummary = diskRepository.observeRunSummariesForExercise(
+            "deleted-exercise",
+        ).first().summaries.single()
 
         assertRun(run, loaded)
+        assertEquals(run.runId, orphanSummary.runId)
+        assertEquals(run.exerciseNameSnapshot, orphanSummary.exerciseNameSnapshot)
         assertFalse(originalExercise.exists())
         assertFalse(wav.exists())
         diskDatabase.close()

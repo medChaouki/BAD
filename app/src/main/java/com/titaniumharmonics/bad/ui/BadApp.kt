@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.titaniumharmonics.bad.ui.editor.ExerciseEditorRoute
+import com.titaniumharmonics.bad.ui.history.ExerciseHistoryRoute
 import com.titaniumharmonics.bad.ui.library.ExerciseLibraryRoute
 import com.titaniumharmonics.bad.ui.practice.PracticeRoute
 import com.titaniumharmonics.bad.ui.practice.PracticeViewModel
@@ -57,8 +58,21 @@ fun BadApp(
                 defaultExerciseFolderUri = uiState.defaultExerciseFolderUri,
                 purpose = uiState.exerciseLibraryPurpose,
                 onOpenExercise = viewModel::openLibraryExercise,
+                onOpenHistory = viewModel::openExerciseHistory,
                 onNavigateBack = viewModel::navigateBack,
             )
+        }
+        AppDestination.EXERCISE_HISTORY -> {
+            val exerciseId = uiState.historyExerciseId
+            if (exerciseId == null) {
+                LaunchedEffect(Unit) { viewModel.navigateBack() }
+            } else {
+                ExerciseHistoryRoute(
+                    exerciseId = exerciseId,
+                    onOpenRun = viewModel::openSavedRunFromHistory,
+                    onNavigateBack = viewModel::navigateBack,
+                )
+            }
         }
         AppDestination.EXERCISE_EDITOR -> {
             ExerciseEditorRoute(

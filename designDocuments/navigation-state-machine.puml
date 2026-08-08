@@ -18,7 +18,13 @@ PRACTICE --> PROCESSING : natural exercise completion
 
 EXERCISE_LIBRARY --> PRACTICE : choose exercise for practice
 EXERCISE_LIBRARY --> EXERCISE_EDITOR : choose exercise to modify
+EXERCISE_LIBRARY --> EXERCISE_HISTORY : History(exerciseId)
 EXERCISE_LIBRARY --> PRACTICE : back
+
+EXERCISE_HISTORY --> EXERCISE_LIBRARY : back
+EXERCISE_HISTORY --> RESULTS : open saved run(runId)
+EXERCISE_HISTORY --> PRACTICE : Retry [source exercise exists]
+EXERCISE_HISTORY --> EXERCISE_HISTORY : filter / sort / confirm delete
 
 EXERCISE_EDITOR --> PRACTICE : back after create
 EXERCISE_EDITOR --> EXERCISE_LIBRARY : back after library edit
@@ -45,6 +51,7 @@ RESULTS --> PRACTICE : back / Practice
 RESULTS --> PRACTICE : Retry (new recording)
 RESULTS --> PRACTICE : Retry saved [source exercise exists]
 RESULTS --> EXERCISE_LIBRARY : Exercise library
+RESULTS --> EXERCISE_HISTORY : back [opened from history]
 
 note right of PROCESSING
   Dedicated destination.
@@ -55,9 +62,16 @@ note right of RESULTS
   ResultsPresentationState is Loading, Ready, or
   LoadFailed. Ready holds the same presentation
   model for current and saved runs. Navigation to
-  history carries only the run ID.
+  Results navigation from history carries only
+  the run ID and returns to that history screen.
 
   Saved-run Retry is disabled if the source
   exercise ID no longer resolves in the library.
+end note
+
+note right of EXERCISE_HISTORY
+  Navigation input is only exerciseId.
+  Rows observe lightweight summary columns.
+  Deleting a run never deletes its exercise.
 end note
 @enduml

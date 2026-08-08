@@ -15,6 +15,7 @@ package "Compose UI" {
   [ResultsScreen] as ResultsUI
   [SettingsRoute] as SettingsUI
   [Exercise Library / Editor] as ExerciseUI
+  [ExerciseHistoryRoute / Screen] as HistoryUI
   [TimingCalibrationRoute] as CalibrationUI
 }
 
@@ -25,6 +26,8 @@ package "UI State" {
   [AppUiState] as AppState
   [PracticeUiState] as PracticeState
   [ResultsPresentationState] as ResultsState
+  [ExerciseHistoryViewModel] as HistoryVM
+  [ExerciseHistoryUiState] as HistoryState
 }
 
 package "Exercise and Timing" {
@@ -72,6 +75,7 @@ package "Immutable Result Domain" {
 
 package "Run History Persistence" {
   [ExerciseRunRepository] as RunRepository
+  [ExerciseRunSummary] as RunSummary
   [ExerciseRunFactory] as RunFactory
   [ExerciseRunSaveCoordinator] as RunSaveCoordinator
   [ExerciseRunMapper] as RunMapper
@@ -87,6 +91,7 @@ BadApp --> ProcessingUI
 BadApp --> ResultsUI
 BadApp --> SettingsUI
 BadApp --> ExerciseUI
+BadApp --> HistoryUI
 BadApp --> CalibrationUI
 
 AppVM --> AppState
@@ -95,6 +100,9 @@ PracticeUI --> PracticeVM
 ProcessingUI --> PracticeVM
 PracticeVM --> PracticeState
 SettingsUI --> SettingsVM
+HistoryUI --> HistoryVM
+HistoryVM --> HistoryState
+HistoryVM --> RunRepository : observe summary projections / delete
 
 PracticeVM --> DocumentStore
 PracticeVM --> Compiler
@@ -117,6 +125,7 @@ PracticeVM --> RunFactory
 PracticeVM --> RunSaveCoordinator
 RunSaveCoordinator --> RunRepository
 AppVM --> RunRepository : load by run ID
+HistoryUI --> AppVM : openSavedRun(runId)
 
 PracticeVM --> MetronomeRepo
 PracticeVM --> DetectionRepo
@@ -147,6 +156,7 @@ ResultsState *-- GraphModel
 ExerciseRun *-- PracticeResult
 ExerciseRun *-- GraphModel
 RunRepository --> ExerciseRun
+RunRepository --> RunSummary
 RunRepository --> RunMapper
 RunMapper <--> RunPayload
 RunRepository --> RunDao
@@ -167,6 +177,12 @@ note right of RunDatabase
   Queryable summaries are direct columns.
   Immutable details use schema-versioned JSON.
   No exercise foreign key or cascade delete.
+end note
+
+note right of HistoryState
+  Loading, Ready, Empty, or Error.
+  Ready applies BPM filtering and deterministic
+  sorting without decoding payloadJson.
 end note
 
 note right of RecordedSession

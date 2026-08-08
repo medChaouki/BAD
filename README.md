@@ -78,7 +78,7 @@ accepted detected hits.
 PR 7.1 introduced the persistence foundation. PR 7.2 now automatically saves
 every valid completed practice run as soon as its `PracticeResult` and compact
 production graph are ready. Partial, failed, and cancelled processing states are
-never saved. History and progress lists remain deferred.
+never saved. PR 7.3 adds per-exercise history; progress charts remain deferred.
 
 `ExerciseRun` is an immutable historical record containing a UUID run identity,
 start and completion timestamps, app and schema versions, the complete
@@ -144,12 +144,40 @@ builds delete the completed WAV; debug builds retain it for diagnostics. A save
 failure preserves the WAV and in-memory result. A cleanup failure is logged
 separately and never changes a successfully persisted run back to failed.
 
+## Exercise history
+
+PR 7.3 adds a History action to each exercise in the library. The dedicated
+screen observes lightweight `ExerciseRunSummary` projections for that exercise
+and renders them in a lazy, stable-keyed list. Each row shows the saved date and
+time, BPM, accuracy, hit rate, mean absolute timing error, timing bias, missed
+notes, and extra hits. The graph, judged notes, and detailed payload are not
+decoded merely to render this list, so histories with hundreds of runs remain
+responsive.
+
+History defaults to newest first and supports oldest first, best accuracy, and
+lowest mean timing-error sorting with deterministic timestamp/run-ID ties. Its
+BPM filter is generated from the BPM values actually present in the saved
+summaries; selecting All restores the complete list. Sorting and filtering are
+presentation-only and never rewrite persisted results.
+
+Tapping a row passes only its run ID through the saved-run loader introduced in
+PR 7.2, then opens the same production Results screen used for a current run.
+Retry uses the current exercise and fresh Settings to start a new attempt with a
+new run ID. If that exercise was deleted, its historical result remains
+viewable and Retry stays disabled.
+
+An individual run can be deleted only after confirmation. The Room query updates
+the visible rows and run count reactively, while the source exercise and every
+other run remain untouched. Exercise deletion still never cascade-deletes saved
+runs; their exercise-name snapshots and result data remain historical truth.
+There is not yet a global orphan archive UI.
+
 Roadmap boundaries:
 
 - PR 7.1: persistence infrastructure only.
 - PR 7.2: automatic save, retry-save, and saved-run reopening infrastructure.
-- PR 7.3: exercise history.
-- PR 7.4: progress tracking.
+- PR 7.3: per-exercise history, filtering, sorting, reopening, and deletion.
+- PR 7.4: progress summaries and trend charts built from the same summary data.
 
 ## Requirements
 
@@ -186,7 +214,7 @@ the debug APK and reports for successful CI runs.
 ## Current limitations
 
 - Exercises use one generic rhythmic lane rather than separate drum voices.
-- Completed runs are not yet saved automatically or exposed through history UI.
+- There is no global browser for history belonging to deleted exercises.
 - There is no progress tracking, cloud sync, AI coaching, or production audio
   playback.
 - Calibration targets the phone speaker and built-in microphone path; changing

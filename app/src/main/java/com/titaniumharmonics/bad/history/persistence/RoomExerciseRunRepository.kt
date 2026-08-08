@@ -8,7 +8,7 @@ import com.titaniumharmonics.bad.history.ExerciseRunLoadResult
 import com.titaniumharmonics.bad.history.ExerciseRunPersistenceError
 import com.titaniumharmonics.bad.history.ExerciseRunRepository
 import com.titaniumharmonics.bad.history.ExerciseRunSaveResult
-import com.titaniumharmonics.bad.history.ExerciseRunSummary
+import com.titaniumharmonics.bad.history.ExerciseRunSummaryCollection
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -118,18 +118,43 @@ class RoomExerciseRunRepository internal constructor(
 
     override fun observeRunSummariesForExercise(
         exerciseId: String,
-    ): Flow<List<ExerciseRunSummary>> {
-        if (exerciseId.isBlank()) return flowOf(emptyList())
+    ): Flow<ExerciseRunSummaryCollection> {
+        if (exerciseId.isBlank()) {
+            return flowOf(
+                ExerciseRunSummaryCollection(
+                    emptyList(),
+                    ExerciseRunPersistenceError.LoadFailure(null),
+                ),
+            )
+        }
         return dao.observeSummariesForExercise(exerciseId)
-            .map { rows -> rows.map(ExerciseRunMapper::toSummary) }
-            .catch { emit(emptyList()) }
+            .map { rows ->
+                ExerciseRunSummaryCollection(rows.map(ExerciseRunMapper::toSummary))
+            }
+            .catch { exception ->
+                emit(
+                    ExerciseRunSummaryCollection(
+                        emptyList(),
+                        exception.toError(null, Operation.LOAD),
+                    ),
+                )
+            }
             .flowOn(persistenceDispatcher)
     }
 
-    override fun observeAllRunSummaries(): Flow<List<ExerciseRunSummary>> =
+    override fun observeAllRunSummaries(): Flow<ExerciseRunSummaryCollection> =
         dao.observeAllSummaries()
-            .map { rows -> rows.map(ExerciseRunMapper::toSummary) }
-            .catch { emit(emptyList()) }
+            .map { rows ->
+                ExerciseRunSummaryCollection(rows.map(ExerciseRunMapper::toSummary))
+            }
+            .catch { exception ->
+                emit(
+                    ExerciseRunSummaryCollection(
+                        emptyList(),
+                        exception.toError(null, Operation.LOAD),
+                    ),
+                )
+            }
             .flowOn(persistenceDispatcher)
 
     override suspend fun deleteRun(runId: String): ExerciseRunDeleteResult =
